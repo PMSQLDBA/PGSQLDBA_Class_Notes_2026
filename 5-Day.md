@@ -38,7 +38,6 @@ Based on the type of work performed, PostgreSQL processes are categorized as bel
 
 **7–9. I/O Workers 1, 2, and 3**
 - Introduced in **PostgreSQL 18** as part of a performance improvement initiative (asynchronous I/O handling).
-- *Corrected: "I/O EORKER 3" → "I/O Worker 3" (typo in the original notes).*
 
 **10. Checkpointer**
 - Works alongside the Background Writer as a safety mechanism.

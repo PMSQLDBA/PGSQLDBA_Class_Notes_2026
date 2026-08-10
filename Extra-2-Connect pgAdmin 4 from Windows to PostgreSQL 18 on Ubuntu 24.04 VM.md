@@ -36,7 +36,7 @@ This SOP explains how to configure a PostgreSQL 18 server running on an Ubuntu 2
 ┌─────────────────────────────────────────────┐
 │             Windows Local Machine           │
 │                                             │
-│  IP: 192.168.0.73                          │
+│  IP: 192.168.0.73                           │
 │  pgAdmin 4                                  │
 └──────────────────────┬──────────────────────┘
                        │
@@ -52,13 +52,13 @@ This SOP explains how to configure a PostgreSQL 18 server running on an Ubuntu 2
 │  ┌───────────────────────────────────────┐  │
 │  │ PostgreSQL 18                         │  │
 │  │ Cluster: 18/main                      │  │
-│  │ Port: 5432                             │  │
+│  │ Port: 5432                            │  │
 │  │                                       │  │
 │  │ listen_addresses = 192.168.0.145      │  │
 │  └───────────────────────────────────────┘  │
 │                                             │
-│  Ubuntu UFW                               │
-│  TCP/5432 ← 192.168.0.73                  │
+│  Ubuntu UFW                                 │
+│  TCP/5432 ← 192.168.0.73                    │
 └─────────────────────────────────────────────┘
 ```
 
@@ -532,7 +532,7 @@ FATAL: password authentication failed for user "postgres"
 At this stage:
 
 ```text
-Network connectivity       ✅
+Network connectivity        ✅
 Port 5432                   ✅
 PostgreSQL listener         ✅
 pg_hba.conf                 ✅

@@ -1,5 +1,7 @@
 # Technical SOP: Connect pgAdmin 4 from Windows to PostgreSQL 18 on Ubuntu 24.04 VM
 
+[PDF] (https://github.com/PMSQLDBA/PGSQLDBA_Class_Notes_2026/blob/main/Technical_SOP_pgAdmin4_PostgreSQL18_UbuntuVM.pdf)
+
 **Document Type:** Technical SOP
 
 **Technology:** PostgreSQL 18, Ubuntu 24.04, VMware Workstation, pgAdmin 4

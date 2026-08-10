@@ -1,7 +1,9 @@
 # Technical SOP: Connect pgAdmin 4 from Windows to PostgreSQL 18 on Ubuntu 24.04 VM
 
 **Document Type:** Technical SOP
+
 **Technology:** PostgreSQL 18, Ubuntu 24.04, VMware Workstation, pgAdmin 4
+
 **Purpose:** Configure and validate remote connectivity from pgAdmin 4 on a Windows workstation to PostgreSQL 18 running inside an Ubuntu 24.04 VMware virtual machine.
 
 ---

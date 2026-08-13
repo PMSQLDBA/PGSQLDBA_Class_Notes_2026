@@ -1,133 +1,166 @@
-As of 13 August 2026, PostgreSQL 18.6 is the current 18.x release, so the installation example using 18.4 is a valid historical lab example, but for a fresh installation you should normally use the latest supported minor release unless the project specifically requires 18.4. 
+# PostgreSQL 18 — Source Code Installation & DBA Prerequisites
 
-INSTALLATION PREREQUISITES
-Class Date: 13 August 2026
+**Class Date:** 13 August 2026
+**Lab Version:** PostgreSQL 18.4
+**Current 18.x Minor Release:** PostgreSQL 18.6
+**Installation Method:** Source Code / Autoconf + Make
+**Primary OS Context:** Linux
 
-Before installing PostgreSQL, we must first perform an operating-system and infrastructure-level capacity check.
+> **Version Note:** PostgreSQL 18.4 is retained as the historical lab example. For a fresh installation, normally use the latest supported PostgreSQL 18 minor release unless the project specifically requires 18.4.
 
-1. Storage Planning
+---
 
-Make sure the /usr filesystem has sufficient free space for PostgreSQL software installation.
+# PART I — INSTALLATION PREREQUISITES
 
-Trainer Note:
-The requirement of “minimum 100 MB free space in /usr” is a lab-specific sizing assumption, not an official PostgreSQL requirement. The actual requirement depends on the PostgreSQL version, installation prefix, optional components, and operating-system packages.
+## 1. Capacity Planning
 
-For the PostgreSQL data directory, check whether the respective mount point has sufficient free storage.
+Before installing PostgreSQL, perform an operating-system and infrastructure-level capacity assessment.
 
-Example Capacity Planning
+### 1.1 Software Installation Storage
 
-Suppose the application is expected to generate approximately 100 GB of database data by the end of the year.
+Check available space on `/usr`:
 
-A possible initial storage plan is:
+```bash
+df -h /usr
+```
 
-Mount Point	Suggested Capacity	Purpose
-DATA	200 GB	PostgreSQL database data
-PG_WAL	100 GB	PostgreSQL WAL
-PG_LOG	50 GB	PostgreSQL server logs
-ARCHIVE	100 GB	Archived WAL files
-BACKUP	200 GB	Local backup storage
+> **Trainer Note:**
+> The often-mentioned **100 MB minimum free space in `/usr`** is a lab assumption, not an official PostgreSQL requirement. Actual requirements depend on PostgreSQL version, installation prefix, optional components, compiler dependencies, and OS packages.
 
-Therefore, we have five logical storage areas:
+---
 
+## 2. PostgreSQL Storage Planning
+
+A PostgreSQL environment can conceptually be divided into:
+
+| Storage Area | Example Capacity | Primary Purpose             |
+| ------------ | ---------------: | --------------------------- |
+| DATA         |           200 GB | PostgreSQL database cluster |
+| PG_WAL       |           100 GB | WAL                         |
+| PG_LOG       |            50 GB | PostgreSQL/server logs      |
+| ARCHIVE      |           100 GB | Archived WAL                |
+| BACKUP       |           200 GB | Local backup storage        |
+
+Example logical layout:
+
+```text
 DATA
 PG_WAL
 PG_LOG
 ARCHIVE
 BACKUP
+```
 
-Why separate storage?
+### 2.1 Why Separate Storage?
 
-If all database activity uses the same storage device, database data, WAL, logs, and backup operations can compete for the same I/O resources.
+Separating workloads can reduce competition between:
 
-Separating workloads onto different storage devices can help isolate I/O workloads and improve predictability.
+* Database data I/O
+* WAL I/O
+* Log I/O
+* Backup I/O
+* Archive I/O
 
 However:
 
-Important DBA Note:
-Separate mount points do not automatically mean separate physical disks.
+> **DBA Note — Mount Point ≠ Physical Disk**
 
-For example, on AWS, five mount points could still ultimately depend on the same underlying storage architecture. If true storage isolation is required, verify the actual EBS/storage design.
+Five mount points do **not** necessarily mean five physical storage devices.
 
-PostgreSQL's documentation specifically notes that putting pg_wal on a different disk from the main database files can be advantageous. 
-P
-PostgreSQL
+For example, multiple AWS mount points may ultimately depend on the same underlying storage architecture.
 
-Also remember:
+If actual I/O isolation is required, verify the underlying storage design.
 
-One disk failure does not necessarily mean the entire database is lost if redundancy, replication, snapshots, or backups are properly configured.
+---
 
-The real protection comes from storage redundancy + backups + WAL archiving + recovery testing, not simply from creating multiple mount points.
+# PART II — POSTGRESQL STORAGE COMPONENTS
 
-2. DATA, WAL, ARCHIVE AND BACKUP Planning
-DATA
+## 3. DATA
 
-The DATA filesystem stores the PostgreSQL cluster.
+The PostgreSQL data directory contains the database cluster.
 
-For example:
+Example:
 
+```text
 /var/lib/pgsql/data
+```
 
+It contains PostgreSQL cluster-level information such as:
 
-This directory contains the database files, configuration files, transaction information, WAL directory, and other cluster-level files.
+```text
+base/
+global/
+pg_wal/
+pg_xact/
+pg_tblspc/
+postgresql.conf
+pg_hba.conf
+```
 
-PostgreSQL's official file-layout documentation describes directories such as base, global, pg_wal, pg_xact, pg_tblspc, and others. 
-P
-PostgreSQL
+The exact contents can vary by PostgreSQL version and configuration.
 
-PG_WAL
+---
 
-pg_wal contains PostgreSQL's Write-Ahead Log (WAL).
+## 4. PG_WAL
 
-WAL is critical for:
+WAL means:
 
-Crash recovery
-Data durability
-Replication
-Point-in-Time Recovery (PITR)
-WAL archiving
+**Write-Ahead Log**
 
-WAL is normally stored inside:
+WAL is fundamental to:
 
+* Crash recovery
+* Durability
+* Replication
+* Point-in-Time Recovery
+* WAL archiving
+
+Normally:
+
+```text
 $PGDATA/pg_wal
+```
 
+### 4.1 WAL Sizing
 
-PostgreSQL documentation states that WAL is automatically enabled and that the administrator must ensure sufficient disk space for WAL. 
-P
-PostgreSQL
+Do **not** treat:
 
-Important DBA Note
+```text
+PG_WAL = 100 GB
+```
 
-Do not think of PG_WAL = 100 GB as a fixed PostgreSQL requirement.
+as a PostgreSQL requirement.
 
-Actual WAL consumption depends on:
+WAL consumption depends on:
 
-Transaction volume
-INSERT/UPDATE/DELETE activity
-Bulk operations
-Checkpoint configuration
-Replication
-WAL retention
-Replication slots
-WAL archiving delays
-Long-running transactions
+* Transaction volume
+* INSERT/UPDATE/DELETE activity
+* Bulk operations
+* Checkpoint behavior
+* Replication
+* Replication slots
+* WAL retention
+* Archiving delays
+* Long-running transactions
 
-Therefore, WAL storage should be sized based on workload and retention requirements.
+> **DBA Rule:**
+> Size WAL storage according to workload and retention requirements.
 
-3. ARCHIVE
+---
 
-Archived WAL is used for:
+# PART III — ARCHIVING AND BACKUP
 
-Point-in-Time Recovery
-Disaster recovery
-Long-term recovery requirements
+## 5. ARCHIVE
 
-PostgreSQL continuously maintains WAL in pg_wal. When WAL archiving is enabled, completed WAL segments can be copied to archive storage using archive_command or archive_library. 
-P
-PostgreSQL
-+1
+Archived WAL supports:
 
-Example architecture:
+* Point-in-Time Recovery
+* Disaster Recovery
+* Long-term recovery requirements
 
+Conceptually:
+
+```text
 PostgreSQL
     |
     +---- DATA
@@ -135,15 +168,17 @@ PostgreSQL
     +---- PG_WAL
     |
     +---- ARCHIVE
-             |
-             +---- S3 / NAS / Object Storage
+              |
+              +---- S3 / NAS / Object Storage
+```
 
-DBA Rule
+### 5.1 Production DBA Rule
 
-Do not treat the local archive filesystem as the only copy of your recovery data.
+Do not rely exclusively on a local archive filesystem.
 
-For production environments, consider an off-server/off-site copy such as:
+A stronger architecture is:
 
+```text
 Local Archive
       |
       +---- S3
@@ -151,46 +186,38 @@ Local Archive
       +---- NAS
       |
       +---- Remote Backup Server
+```
 
-4. BACKUP
+---
 
-A local backup filesystem can be used for operational recovery.
+## 6. BACKUP
 
 Example:
 
+```text
 BACKUP = 200 GB
+```
 
+The amount and retention of backup storage should be determined by:
 
-The statement:
+* RPO
+* RTO
+* Backup frequency
+* Backup size
+* Retention period
+* Storage cost
+* Compliance requirements
+* Disaster recovery requirements
 
-“Keep only one backup locally and copy remaining backups to S3/NAS.”
+PostgreSQL broadly supports:
 
-is a backup-retention policy, not a PostgreSQL requirement.
+1. SQL dumps
+2. File-system-level backups
+3. Continuous archiving / PITR
 
-The correct retention policy should be determined by:
+### 6.1 Critical DBA Principle
 
-RPO — Recovery Point Objective
-RTO — Recovery Time Objective
-Backup size
-Backup frequency
-Retention period
-Storage cost
-Compliance requirements
-Disaster recovery requirements
-
-PostgreSQL officially describes three major backup approaches:
-
-SQL dump
-File-system-level backup
-Continuous archiving/PITR 
-P
-PostgreSQL
-Important DBA Note
-
-A backup is useful only if it can actually be restored.
-
-Therefore:
-
+```text
 Backup
    ↓
 Restore Test
@@ -198,81 +225,83 @@ Restore Test
 Validation
    ↓
 Recovery Readiness
+```
 
+> **Remember:**
+> A successful backup job does not automatically prove that recovery will succeed.
 
-Never assume that a successful backup job automatically means that recovery will succeed.
+---
 
-5. CONCURRENCY, CONNECTIONS AND TPS
+# PART IV — CPU, CONNECTIONS AND MEMORY
 
-Suppose the application currently has:
+## 7. Connections vs Concurrency vs TPS
 
+Suppose:
+
+```text
 Average concurrent connections = 8
+```
 
+These terms are different.
 
-Three terms must be clearly understood:
-
-Connections
+### Connections
 
 Number of client sessions connected to PostgreSQL.
 
-Concurrency
+### Concurrency
 
 Number of operations/sessions actively executing or waiting at the same time.
 
-TPS
+### TPS
 
 Transactions Per Second.
 
-For example:
-
-8 concurrent connections
-
-
-does not mean:
-
-8 TPS
-
-
-These are completely different measurements.
-
-Important Correction to the CPU Explanation
-
-The following statement is an oversimplification:
-
-“1 CPU can handle 4 connections with nanoseconds gap.”
-
-This should not be used as a PostgreSQL sizing rule.
-
-PostgreSQL normally uses a separate server process for each client connection, and the operating system schedules those processes on available CPU cores. PostgreSQL also has background and worker processes. 
-P
-PostgreSQL
-
 Therefore:
 
+```text
+8 connections
+```
+
+does **not** mean:
+
+```text
+8 TPS
+```
+
+---
+
+## 8. CPU Planning
+
+Do not use:
+
+```text
+1 CPU = 4 connections
 2 CPUs = 8 connections
+```
 
+as PostgreSQL sizing rules.
 
-is not a valid PostgreSQL sizing formula.
+PostgreSQL normally uses a separate server process for each client connection, while the operating system schedules those processes across available CPUs.
 
 CPU requirements depend on:
 
-SQL complexity
-Query execution plans
-Index usage
-Sorting
-Hash operations
-Parallel queries
-Number of active sessions
-Transaction rate
-Lock contention
-I/O latency
-Application workload
-DBA Rule
+* SQL complexity
+* Query plans
+* Index usage
+* Sorting
+* Hash operations
+* Parallel queries
+* Active sessions
+* Transaction rate
+* Lock contention
+* I/O latency
+* Application workload
 
-Do not size CPU based only on the number of connections.
+### 8.1 DBA Monitoring
 
-Instead, monitor:
+Monitor:
 
+```text
 CPU utilization
 Load average
 TPS
@@ -281,41 +310,41 @@ Active sessions
 Wait events
 I/O utilization
 Lock waits
+```
 
-6. RAM / MEMORY PLANNING
+> **DBA Rule:**
+> Never size CPU solely from connection count.
 
-Memory requirements depend on the workload and PostgreSQL configuration.
+---
 
-The following:
+## 9. RAM / Memory Planning
 
-2 CPUs  -> 8 GB RAM
-4 CPUs  -> 16 GB RAM
+The following can be used as **training/lab guidelines only**:
 
+```text
+2 CPUs  → 8 GB RAM
+4 CPUs  → 16 GB RAM
+```
 
-can be used as a training/lab sizing guideline, but it is not an official PostgreSQL sizing formula.
+They are **not official PostgreSQL sizing formulas**.
 
-PostgreSQL uses memory for several purposes, including:
+PostgreSQL memory consumption involves:
 
+```text
 shared_buffers
 work_mem
 maintenance_work_mem
 temp_buffers
-Operating-system page cache
-Connection/backend overhead
+OS page cache
+Backend/connection memory
 Other PostgreSQL processes
+```
 
-The default shared_buffers value is typically 128 MB, but PostgreSQL documentation notes that significantly higher values are normally required for good performance. 
-P
-PostgreSQL
+### 9.1 Swap
 
-SWAP
+Conceptually:
 
-If physical memory is insufficient, Linux may use swap.
-
-This can introduce additional disk I/O and latency.
-
-Therefore:
-
+```text
 Insufficient RAM
        ↓
 Memory pressure
@@ -325,160 +354,186 @@ Possible swapping
 Additional disk I/O
        ↓
 Performance degradation
+```
 
+Excessive connections can also increase memory consumption.
 
-PostgreSQL documentation also warns that excessive connections and memory-related settings can contribute to memory exhaustion; in some cases, reducing max_connections and using connection pooling is preferable. 
-P
-PostgreSQL
+> **DBA Note:**
+> Connection pooling can be preferable to simply increasing `max_connections`.
 
-7. CHECK WHETHER POSTGRESQL IS ALREADY RUNNING
+---
 
-Before installing PostgreSQL, verify whether a PostgreSQL server is already running.
+# PART V — CHECK EXISTING POSTGRESQL
 
-[root@mypg ~]# ps -ef | grep postgres
+## 10. Check Whether PostgreSQL Is Running
 
+```bash
+ps -ef | grep postgres
+```
 
 Example:
 
-root        2082    2052  0 14:08 pts/3    00:00:00 grep --color=auto postgres
+```text
+root  2082  2052  0 14:08 pts/3  00:00:00 grep --color=auto postgres
+```
 
+This example indicates that no PostgreSQL server process is visible.
 
-In this example, PostgreSQL is not running.
+---
 
-8. CHECK WHETHER POSTGRESQL IS ALREADY INSTALLED
+## 11. Check Whether PostgreSQL Is Installed
 
-Check whether pg_config already exists:
+Check the binaries:
 
-[root@mypg ~]# find / -name pg_config
-
-
-If no result is returned, pg_config may not be present.
-
-Better DBA Validation
-
-Also check:
-
+```bash
 which psql
 which postgres
 which pg_config
+```
 
+Check versions:
 
-and:
-
+```bash
 psql --version
 postgres --version
 pg_config --version
+```
 
+You can also search for `pg_config`:
 
-If PostgreSQL was installed using an RPM/package manager, also check the installed packages.
+```bash
+find / -name pg_config 2>/dev/null
+```
 
-SOURCE CODE INSTALLATION
-9. Important Installation Note
+If PostgreSQL was installed through an RPM-based package manager, also check installed packages.
 
-For normal production deployments, PostgreSQL documentation recommends using binary packages when they are available. Source installation is particularly useful when you need custom build options, development work, or extension development. 
-P
-PostgreSQL
+---
 
-In this training, we are learning source-code installation because it is important for DBA understanding.
+# PART VI — SOURCE CODE INSTALLATION
 
-STEP 1 — INSTALL BUILD PREREQUISITES
+## 12. When Should Source Installation Be Used?
 
-Move to the PostgreSQL working directory:
+For normal production installations, binary packages are generally preferable when suitable packages are available.
 
-[root@mypg ~]# cd /var/lib/pgsql/
+Source installation is useful for:
 
+* Custom build requirements
+* Development
+* Extension development
+* Learning PostgreSQL internals
+* Special compilation requirements
 
-Verify:
+> **Training Note:**
+> This lab uses source installation to understand the PostgreSQL installation process.
 
-[root@mypg pgsql]# pwd
-/var/lib/pgsql
+---
 
+# PART VII — BUILD PREREQUISITES
 
-Install required development packages.
+## 13. Prepare the Working Directory
 
-Example from the lab:
-
-[root@mypg pgsql]# yum install gcc wget perl zlib-devel bison icu libicu libicu-devel flex readline-devel -y
-
-DBA Note
-
-The exact package names vary by Linux distribution.
-
-PostgreSQL 18 requires, among other things:
-
-GNU make
-C compiler
-tar + gzip/bzip2
-Flex
-Bison
-Perl
-Readline
-zlib
-ICU
-
-Additional libraries such as OpenSSL, LZ4, Zstandard, Kerberos, LDAP, PAM, etc. are required when corresponding optional features are enabled. 
-P
-PostgreSQL
-
-Always verify prerequisites against the PostgreSQL version and Linux distribution being used.
-
-STEP 2 — DOWNLOAD POSTGRESQL SOURCE CODE
-
-PostgreSQL source packages are available from the official PostgreSQL download area. 
-P
-PostgreSQL
-
-Example:
-
-[root@mypg pgsql]# wget https://ftp.postgresql.org/pub/source/v18.4/postgresql-18.4.tar.gz
-
-
-Verify:
-
-[root@mypg pgsql]# ls -ltr
-
-
-Example:
-
--rw-r--r--. 1 root root 29477735 May 11 19:54 postgresql-18.4.tar.gz
-
-DBA Note
-
-For a new installation, use the latest supported minor release unless the application specifically requires another version.
-
-For example, on 13 August 2026, PostgreSQL 18.6 is the current 18.x release. 
-P
-PostgreSQL
-
-STEP 3 — EXTRACT THE SOURCE CODE
-[root@mypg pgsql]# tar -xf postgresql-18.4.tar.gz
-
-
-Verify:
-
-[root@mypg pgsql]# ls -ltr
-
+```bash
+cd /var/lib/pgsql/
+pwd
+```
 
 Expected:
 
-drwxrwxr-x. 7 root root     4096 ... postgresql-18.4
--rw-r--r--. 1 root root 29477735 ... postgresql-18.4.tar.gz
+```text
+/var/lib/pgsql
+```
 
+---
 
-Move into the source directory:
+## 14. Install Build Dependencies
 
-[root@mypg pgsql]# cd postgresql-18.4
+Example:
 
+```bash
+yum install gcc wget perl zlib-devel bison icu libicu libicu-devel flex readline-devel -y
+```
+
+> **DBA Note:**
+> Package names vary by Linux distribution and version.
+
+PostgreSQL 18 requires, among other things:
+
+* GNU make
+* C compiler
+* tar/gzip or equivalent archive tools
+* Flex
+* Bison
+* Perl
+* Readline
+* zlib
+* ICU
+
+Optional features may require additional libraries such as:
+
+* OpenSSL
+* LZ4
+* Zstandard
+* Kerberos
+* LDAP
+* PAM
+
+---
+
+# PART VIII — DOWNLOAD AND EXTRACT SOURCE
+
+## 15. Download PostgreSQL
+
+Historical lab example:
+
+```bash
+wget https://ftp.postgresql.org/pub/source/v18.4/postgresql-18.4.tar.gz
+```
 
 Verify:
 
-[root@mypg postgresql-18.4]# pwd
+```bash
+ls -ltr
+```
+
+> **Version Note:**
+> For a new installation, normally use the latest supported minor release. As of **13 August 2026**, PostgreSQL **18.6** is the current 18.x minor release.
+
+---
+
+## 16. Extract Source
+
+```bash
+tar -xf postgresql-18.4.tar.gz
+```
+
+Verify:
+
+```bash
+ls -ltr
+```
+
+Move into the source directory:
+
+```bash
+cd postgresql-18.4
+pwd
+```
+
+Expected:
+
+```text
 /var/lib/pgsql/postgresql-18.4
+```
 
-STEP 4 — UNDERSTAND THE SOURCE TREE
+---
 
-You will see directories/files such as:
+# PART IX — UNDERSTAND THE SOURCE TREE
 
+## 17. Important Source Files and Directories
+
+Typical contents include:
+
+```text
 src/
 contrib/
 doc/
@@ -487,37 +542,41 @@ configure.ac
 meson.build
 Makefile
 README.md
+```
 
+The PostgreSQL server source is primarily written in C.
 
-The source code is primarily written in C.
+---
 
-STEP 5 — CONFIGURE
+# PART X — BUILD POSTGRESQL
 
-The traditional source-build process is:
+## 18. Traditional Build Flow
 
+The traditional Autoconf/Make process is:
+
+```text
 ./configure
-       ↓
+      ↓
 make
-       ↓
+      ↓
 make install
+```
 
+PostgreSQL also supports the Meson build system, but this lab uses Autoconf/Make.
 
-PostgreSQL also supports a Meson build system, but the traditional Autoconf/Make process is being used in this lab. 
-P
-PostgreSQL
-+1
+---
 
-Run:
+## 19. Run configure
 
-[root@mypg postgresql-18.4]# ./configure
+```bash
+./configure
+```
 
-What does configure do?
+### What does configure do?
 
-configure examines the operating system, compiler, libraries, and available features and creates configuration/build files appropriate for the current system. 
-P
-PostgreSQL
+Conceptually:
 
-Classroom Explanation
+```text
 configure
     ↓
 Check OS
@@ -529,246 +588,251 @@ Check libraries
 Check available features
     ↓
 Generate build configuration
+```
 
+Immediately verify the exit status:
 
-If configure completes successfully, check the shell exit status:
-
-[root@mypg postgresql-18.4]# echo $?
-0
-
-Important Note
-
-Checking config.status is not the standard way to determine whether configure succeeded.
-
-Use:
-
+```bash
 echo $?
+```
 
+Result:
 
-immediately after the command.
+```text
+0
+```
 
-Exit status:
+means success.
 
-0      = success
-non-zero = failure
+Non-zero means failure.
 
-STEP 6 — MAKE
+> **Important:**
+> `echo $?` immediately after `./configure` is the standard simple way to check the command's exit status.
 
-Run:
+---
 
-[root@mypg postgresql-18.4]# make
+## 20. Run make
 
+```bash
+make
+```
 
-The make command compiles/builds PostgreSQL according to the generated build configuration.
+Conceptually:
 
-Classroom Explanation
+```text
 configure
-   =
-Prepare the build environment
+    =
+Prepare build environment
 
 make
-   =
-Compile/build PostgreSQL
+    =
+Compile PostgreSQL
 
 make install
-   =
-Install the compiled files
+    =
+Install PostgreSQL
+```
 
+---
 
-The official PostgreSQL documentation describes ./configure, make, and make install as the standard Autoconf/Make installation procedure. 
-P
-PostgreSQL
+## 21. Run make install
 
-STEP 7 — MAKE INSTALL
-[root@mypg postgresql-18.4]# make install
+```bash
+make install
+```
 
+Unless another prefix was supplied, the traditional source installation defaults to:
 
-By default, the source installation uses:
-
+```text
 /usr/local/pgsql
+```
 
+---
 
-unless a different --prefix was supplied during configure. 
-P
-PostgreSQL
+# PART XI — CONTRIB MODULES
 
-STEP 8 — INSTALL CONTRIB MODULES
+## 22. Build and Install contrib
 
-PostgreSQL provides additional modules and extensions under the contrib directory.
+Move into:
 
-Move to:
-
-[root@mypg postgresql-18.4]# cd contrib/
-
+```bash
+cd contrib/
+```
 
 Verify:
 
-[root@mypg contrib]# pwd
-/var/lib/pgsql/postgresql-18.4/contrib
-
+```bash
+pwd
+```
 
 Build:
 
-[root@mypg contrib]# make
-
+```bash
+make
+```
 
 Install:
 
-[root@mypg contrib]# make install
+```bash
+make install
+```
 
-Important DBA Note
+### Important Concept
 
-contrib is not simply another mandatory part of the PostgreSQL core server.
+`contrib` contains additional supplied modules, extensions, and utilities.
 
-It contains additional supplied modules, extensions, and utilities.
+It is not simply another mandatory component of the PostgreSQL core server.
 
-The PostgreSQL documentation states that these optional components are not automatically built unless the appropriate world target is used. They can be built and installed from the contrib directory. 
-P
-PostgreSQL
-+1
+### Extension Installation vs Extension Creation
 
-Also remember:
+These are different operations:
 
-Install extension files
-        ≠
-Enable extension in database
+```text
+Build/install extension files
+            ↓
+CREATE EXTENSION
+            ↓
+Extension becomes available in a specific database
+```
 
+Example:
 
-After the supporting files are installed, an extension may need:
-
+```sql
 CREATE EXTENSION extension_name;
+```
 
+The SQL command is executed inside the database where the extension is required.
 
-and this is done inside the required database. 
-P
-PostgreSQL
+---
 
-VALIDATION
-9. Check PostgreSQL Binaries
-[root@mypg contrib]# cd /usr/local/pgsql/bin/
+# PART XII — INSTALLATION VALIDATION
 
+## 23. Validate PostgreSQL Binaries
 
-Check:
+```bash
+cd /usr/local/pgsql/bin/
+ls -ltr
+```
 
-[root@mypg bin]# ls -ltr
+Important executables include:
 
+| Utility          | Purpose                     |
+| ---------------- | --------------------------- |
+| `postgres`       | PostgreSQL server           |
+| `psql`           | Command-line client         |
+| `pg_ctl`         | Server control              |
+| `initdb`         | Initialize cluster          |
+| `pg_dump`        | Logical backup              |
+| `pg_restore`     | Restore dump archive        |
+| `pg_basebackup`  | Physical base backup        |
+| `pg_upgrade`     | Major-version upgrade       |
+| `pg_isready`     | Connection readiness        |
+| `pg_config`      | Build/install information   |
+| `pg_controldata` | Cluster control information |
+| `pg_checksums`   | Checksum management         |
+| `pg_waldump`     | Inspect WAL                 |
+| `pgbench`        | Benchmarking                |
 
-You should see PostgreSQL executables such as:
+---
 
-postgres
-psql
-initdb
-pg_ctl
-pg_config
-pg_dump
-pg_restore
-pg_basebackup
-pg_rewind
-pg_upgrade
-pg_isready
-pg_controldata
-pg_checksums
-pg_waldump
-pgbench
-createdb
-createuser
-dropdb
-dropuser
-vacuumdb
-reindexdb
-clusterdb
+## 24. Validate pg_config
 
-Classroom Note
+```bash
+./pg_config
+```
 
-Each PostgreSQL utility has a specific purpose.
+Important information includes:
 
-Examples:
+```text
+BINDIR
+LIBDIR
+INCLUDEDIR
+SHAREDIR
+VERSION
+```
 
-postgres       → PostgreSQL server
-psql            → PostgreSQL command-line client
-pg_ctl          → Start/stop/restart/control server
-initdb          → Initialize a database cluster
-pg_dump         → Logical backup of a database
-pg_restore      → Restore a pg_dump archive
-pg_basebackup   → Physical base backup
-pg_upgrade      → Major-version upgrade
-pg_isready      → Check server connection readiness
-pg_config       → Display PostgreSQL build/install information
-pg_controldata  → Display cluster control information
-pg_waldump      → Inspect WAL records
+Example:
 
-10. PG_CONFIG
-
-Run:
-
-[root@mypg bin]# ./pg_config
-
-
-Important output includes:
-
+```text
 BINDIR = /usr/local/pgsql/bin
 LIBDIR = /usr/local/pgsql/lib
 INCLUDEDIR = /usr/local/pgsql/include
 SHAREDIR = /usr/local/pgsql/share
 VERSION = PostgreSQL 18.4
+```
 
+`pg_config` is especially useful when building PostgreSQL extensions.
 
-pg_config is particularly useful when compiling PostgreSQL extensions because it tells build systems where the PostgreSQL headers, libraries, binaries, and supporting files are installed.
+---
 
-CREATE THE DATA DIRECTORY
+# PART XIII — CREATE AND PREPARE PGDATA
 
-PostgreSQL binaries are installed, but the database cluster has not yet been initialized.
+## 25. Create Data Directory
+
+The PostgreSQL binaries are installed, but the cluster does not yet exist.
 
 Create the data directory:
 
-[root@mypg bin]# mkdir -p /var/lib/pgsql/data
+```bash
+mkdir -p /var/lib/pgsql/data
+```
 
-11. POSTGRES USER OWNERSHIP
+---
 
-PostgreSQL should run under a dedicated operating-system account, normally called:
+## 26. Set PostgreSQL Ownership
 
+Create/use the dedicated OS account:
+
+```text
 postgres
+```
 
+Set ownership:
 
-Ensure the PostgreSQL installation and data directory have appropriate ownership.
+```bash
+chown -R postgres:postgres /usr/local/pgsql/
+chown -R postgres:postgres /var/lib/pgsql/data/
+```
 
-Example:
+> **Security Rule:**
+> Never run the PostgreSQL server as `root`.
 
-[root@mypg bin]# chown -R postgres:postgres /usr/local/pgsql/
-[root@mypg bin]# chown -R postgres:postgres /var/lib/pgsql/data/
+---
 
-DBA Security Note
+# PART XIV — INITIALIZE DATABASE CLUSTER
 
-Do not run the PostgreSQL server as root.
+## 27. Switch to postgres User
 
-The PostgreSQL server must be run by an appropriate unprivileged operating-system user.
-
-12. SWITCH TO POSTGRES USER
-[root@mypg bin]# su - postgres
-
+```bash
+su - postgres
+```
 
 Verify:
 
-[postgres@mypg ~]$ whoami
+```bash
+whoami
+```
+
+Expected:
+
+```text
 postgres
+```
 
-DATABASE CLUSTER INITIALIZATION
-13. INITDB
+---
 
-PostgreSQL requires a database cluster before the server can start.
+## 28. Run initdb
 
-Run:
+```bash
+/usr/local/pgsql/bin/initdb -D /var/lib/pgsql/data/
+```
 
-[postgres@mypg ~]$ /usr/local/pgsql/bin/initdb -D /var/lib/pgsql/data/
+### What does initdb do?
 
-What does initdb do?
+It creates a PostgreSQL database cluster containing items such as:
 
-initdb creates a new PostgreSQL database cluster.
-
-It creates:
-
+```text
 System catalogs
-Default configuration files
 postgresql.conf
 pg_hba.conf
 pg_ident.conf
@@ -776,42 +840,51 @@ PG_VERSION
 pg_wal
 base
 global
-Other required cluster directories
+Other cluster directories
+```
 
-PostgreSQL documentation defines a database cluster as the collection of databases managed by a single server instance. 
-P
-PostgreSQL
+> **Important Concept:**
+> `make install` installs PostgreSQL software.
+> `initdb` creates the PostgreSQL database cluster.
 
-14. INITDB AUTHENTICATION WARNING
+---
 
-The lab output shows:
+# PART XV — AUTHENTICATION
 
+## 29. Review initdb Authentication
+
+You may see:
+
+```text
 initdb: warning: enabling "trust" authentication for local connections
+```
 
-IMPORTANT SECURITY NOTE
+This must not be ignored in production.
 
-Do not ignore this message in production.
-
-trust authentication means that PostgreSQL can accept a connection without password authentication under the matching pg_hba.conf rule.
+`trust` authentication can allow matching local connections without password authentication.
 
 Review:
 
+```text
 $PGDATA/pg_hba.conf
+```
 
+and configure authentication according to organizational security requirements.
 
-and configure authentication according to the organization's security requirements.
+---
 
-15. CHECK DATA DIRECTORY
-[postgres@mypg ~]$ cd /var/lib/pgsql/data/
+# PART XVI — VERIFY PGDATA
 
+## 30. Inspect the Data Directory
 
-Then:
+```bash
+cd /var/lib/pgsql/data/
+ls -ltr
+```
 
-[postgres@mypg data]$ ls -ltr
+You may see:
 
-
-You will see directories/files such as:
-
+```text
 base/
 global/
 pg_wal/
@@ -828,531 +901,509 @@ postgresql.auto.conf
 pg_hba.conf
 pg_ident.conf
 PG_VERSION
+```
 
+The exact contents vary by PostgreSQL version and configuration.
 
-The exact list can vary slightly by PostgreSQL version and configuration.
+---
 
-START / STOP / RESTART / STATUS
-16. CHECK SERVER STATUS
-[postgres@mypg data]$ /usr/local/pgsql/bin/pg_ctl \
--D /var/lib/pgsql/data/ status
+# PART XVII — SERVER CONTROL
 
+## 31. Check Status
 
-If the server is not running:
+```bash
+pg_ctl -D /var/lib/pgsql/data/ status
+```
 
+If stopped:
+
+```text
 pg_ctl: no server running
+```
 
-17. START POSTGRESQL
-[postgres@mypg data]$ /usr/local/pgsql/bin/pg_ctl \
--D /var/lib/pgsql/data/ start
+---
 
+## 32. Start PostgreSQL
 
-Expected message:
+```bash
+pg_ctl -D /var/lib/pgsql/data/ start
+```
 
+Expected:
+
+```text
 server started
+```
 
+---
 
-PostgreSQL documentation recommends using pg_ctl to start, stop, restart, reload, and check the status of a server. 
-P
-PostgreSQL
+## 33. Check Status Again
 
-18. CHECK STATUS AGAIN
-[postgres@mypg data]$ /usr/local/pgsql/bin/pg_ctl \
--D /var/lib/pgsql/data/ status
-
+```bash
+pg_ctl -D /var/lib/pgsql/data/ status
+```
 
 Example:
 
+```text
 pg_ctl: server is running (PID: 7961)
 /usr/local/pgsql/bin/postgres "-D" "/var/lib/pgsql/data"
+```
 
-19. STOP POSTGRESQL
-[postgres@mypg data]$ /usr/local/pgsql/bin/pg_ctl \
--D /var/lib/pgsql/data/ stop
+---
 
+## 34. Stop PostgreSQL
 
-By default, pg_ctl stop uses fast shutdown.
+```bash
+pg_ctl -D /var/lib/pgsql/data/ stop
+```
 
-Fast shutdown:
+Default shutdown mode:
 
-Prevents new connections
-Rolls back active transactions
-Disconnects clients
-Performs a clean shutdown
+```text
+fast
+```
 
-PostgreSQL also supports:
+PostgreSQL supports:
 
+```text
 smart
 fast
 immediate
+```
 
+### Shutdown Modes
 
-shutdown modes. 
-P
-PostgreSQL
+**Smart**
 
-Important DBA Note
+Wait for clients to disconnect.
 
-Avoid immediate shutdown unless you have a specific reason.
+**Fast**
 
-Immediate shutdown terminates server processes immediately and causes crash recovery during the next startup. 
-P
-PostgreSQL
+Prevent new connections, terminate active sessions, roll back active transactions, and perform a clean shutdown.
 
-20. START AGAIN
-[postgres@mypg data]$ /usr/local/pgsql/bin/pg_ctl \
--D /var/lib/pgsql/data/ start
+**Immediate**
 
-21. RESTART
-[postgres@mypg data]$ /usr/local/pgsql/bin/pg_ctl \
--D /var/lib/pgsql/data/ restart
+Terminate server processes immediately.
 
+> **DBA Rule:**
+> Avoid `immediate` shutdown unless there is a specific reason. The next startup may require crash recovery.
 
-restart effectively performs a stop followed by a start and is useful when configuration changes require a server restart. 
-P
-PostgreSQL
+---
 
-22. RELOAD
-Definition
+## 35. Start Again
 
-RELOAD causes PostgreSQL to reread its configuration files without shutting down the database server.
+```bash
+pg_ctl -D /var/lib/pgsql/data/ start
+```
 
-Command:
+---
 
-pg_ctl reload
+## 36. Restart
 
+```bash
+pg_ctl -D /var/lib/pgsql/data/ restart
+```
+
+Conceptually:
+
+```text
+restart
+   ↓
+stop
+   ↓
+start
+```
+
+A restart causes service interruption.
+
+---
+
+# PART XVIII — RELOAD
+
+## 37. Configuration Reload
+
+Reload rereads configuration without shutting down PostgreSQL.
+
+```bash
+pg_ctl -D $PGDATA reload
+```
 
 or:
 
-pg_ctl -D $PGDATA reload
+```bash
+pg_ctl reload
+```
 
+Conceptually:
 
-It sends a SIGHUP signal to the PostgreSQL server, causing configuration files such as postgresql.conf and pg_hba.conf to be reread. 
-P
-PostgreSQL
-
-Example
-
-If you modify:
-
-pg_hba.conf
-
-
-you normally need to reload PostgreSQL for the change to be reread.
-
+```text
 Configuration change
        ↓
 pg_ctl reload
        ↓
+Configuration reread
+       ↓
 No database shutdown
+```
 
-Important Note
+For example, after changing `pg_hba.conf`, a reload is normally required.
 
-Not every parameter can be changed by reload.
+> **Important:**
+> Not every configuration parameter supports reload. Some parameters require a restart.
 
-Some parameters require:
+---
 
-Restart
+# PART XIX — POSTGRESQL PROCESSES
 
+## 38. View PostgreSQL Processes
 
-Always check the parameter's context in PostgreSQL documentation.
+```bash
+ps -ef | grep postgres
+```
 
-23. POSTGRESQL SERVER PROCESSES
+PostgreSQL 18 can show processes such as:
 
-Check the processes:
+```text
+postgres
+postgres: io worker
+postgres: checkpointer
+postgres: background writer
+postgres: walwriter
+postgres: autovacuum launcher
+postgres: logical replication launcher
+```
 
-[postgres@mypg data]$ ps -ef | grep postgres
+Client sessions also appear as PostgreSQL server processes.
 
+> **Version Note:**
+> Do not memorize one universal PostgreSQL process list. The exact processes depend on PostgreSQL version and configuration.
 
-Example:
+---
 
-postgres    8014       1  0 13:51 ? 00:00:00 /usr/local/pgsql/bin/postgres -D /var/lib/pgsql/data
-postgres    8015    8014  0 13:51 ? 00:00:00 postgres: io worker 1
-postgres    8016    8014  0 13:51 ? 00:00:00 postgres: io worker 0
-postgres    8017    8014  0 13:51 ? 00:00:00 postgres: io worker 2
-postgres    8018    8014  0 13:51 ? 00:00:00 postgres: checkpointer
-postgres    8019    8014  0 13:51 ? 00:00:00 postgres: background writer
-postgres    8021    8014  0 13:51 ? 00:00:00 postgres: walwriter
-postgres    8022    8014  0 13:51 ? 00:00:00 postgres: autovacuum launcher
-postgres    8023    8014  0 13:51 ? 00:00:00 postgres: logical replication launcher
+## 39. Important Background Processes
 
+### Checkpointer
 
-The main PostgreSQL server process is the parent of these server/background processes.
+Performs checkpoints and helps flush dirty pages to durable storage.
 
-Classroom Explanation
-PostgreSQL Main Server
-        |
-        +---- IO workers
-        +---- Checkpointer
-        +---- Background writer
-        +---- WAL writer
-        +---- Autovacuum launcher
-        +---- Logical replication launcher
-        +---- Client backend processes
+### Background Writer
 
+Writes dirty shared buffers in the background.
 
-The exact process list depends on PostgreSQL version and configuration.
+### WAL Writer
 
-PostgreSQL 18 includes additional I/O worker processes, so do not memorize an old process list as universally applicable. PostgreSQL's monitoring documentation shows the primary server process and its background processes and notes that individual client connections also appear as PostgreSQL server processes. 
-P
-PostgreSQL
+Writes WAL data from memory to WAL files.
 
-24. IMPORTANT SERVER PROCESSES
-Checkpointer
-
-Responsible for performing checkpoints.
-
-Checkpoints flush dirty data pages to durable storage.
-
-Background Writer
-
-Helps write dirty shared buffers to disk in the background.
-
-WAL Writer
-
-Writes WAL data from shared memory to WAL files.
-
-Autovacuum Launcher
+### Autovacuum Launcher
 
 Coordinates autovacuum workers.
 
-Autovacuum is highly recommended and automates VACUUM and ANALYZE activity. 
-P
-PostgreSQL
+### Logical Replication Launcher
 
-Logical Replication Launcher
+Coordinates logical replication workers when configured.
 
-Coordinates logical replication workers when logical replication is configured.
+### I/O Workers
 
-I/O Workers
+PostgreSQL 18 includes I/O worker processes supporting asynchronous I/O processing.
 
-PostgreSQL 18 includes I/O worker processes that participate in asynchronous I/O processing.
+---
 
-DBA Note
+# PART XX — ENVIRONMENT VARIABLES
 
-The process list seen in ps depends on PostgreSQL version and configuration. Always understand the version-specific architecture instead of assuming that every server will show exactly the same processes.
+## 40. PostgreSQL User Home
 
-ENVIRONMENT VARIABLES SETUP
-25. POSTGRES USER HOME DIRECTORY
-[postgres@mypg data]$ cd
-
-
-Check:
-
-[postgres@mypg ~]$ pwd
-/home/postgres
-
-
-Check hidden files:
-
-[postgres@mypg ~]$ ls -la
-
-Classroom Note
-ls
-
-
-does not normally display hidden files.
-
-ls -la
-
-
-displays hidden files such as:
-
-.bash_profile
-.bashrc
-.bash_logout
-
-26. SET PATH AND PGDATA
-
-Edit:
-
-[postgres@mypg ~]$ vi ~/.bash_profile
-
-
-Add:
-
-export PATH=$PATH:/usr/local/pgsql/bin
-export PGDATA=/var/lib/pgsql/data
-
-
-Reload the shell environment:
-
-[postgres@mypg ~]$ source ~/.bash_profile
-
-
-Verify:
-
-[postgres@mypg ~]$ echo $PATH
-
-
-and:
-
-[postgres@mypg ~]$ echo $PGDATA
-
+```bash
+cd
+pwd
+```
 
 Expected:
 
-/var/lib/pgsql/data
+```text
+/home/postgres
+```
 
-DBA Note
+Display hidden files:
 
-PGDATA allows PostgreSQL utilities such as pg_ctl to locate the cluster without specifying -D every time.
+```bash
+ls -la
+```
 
-For example:
+Examples:
 
-pg_ctl status
+```text
+.bash_profile
+.bashrc
+.bash_logout
+```
 
+---
 
-instead of:
-
-pg_ctl -D /var/lib/pgsql/data status
-
-
-The official pg_ctl documentation confirms that PGDATA is used as the default data-directory location when -D is not supplied. 
-P
-PostgreSQL
-
-27. CHECK POSTGRESQL STATUS
-
-Without specifying the full path:
-
-[postgres@mypg ~]$ pg_ctl status
-
-
-Example:
-
-pg_ctl: server is running (PID: 8069)
-/usr/local/pgsql/bin/postgres "-D" "/var/lib/pgsql/data"
-
-POSTGRESQL AUTO START AFTER LINUX REBOOT
-28. Problem
-
-With a manual source installation, PostgreSQL does not automatically become a Linux service merely because make install was executed.
-
-We must configure operating-system startup.
-
-29. rc.local METHOD
-
-In the lab, we use:
-
-/etc/rc.d/rc.local
-
+## 41. Set PATH and PGDATA
 
 Edit:
 
-[root@mypg ~]# vi /etc/rc.d/rc.local
-
+```bash
+vi ~/.bash_profile
+```
 
 Add:
 
+```bash
+export PATH=$PATH:/usr/local/pgsql/bin
+export PGDATA=/var/lib/pgsql/data
+```
+
+Reload:
+
+```bash
+source ~/.bash_profile
+```
+
+Verify:
+
+```bash
+echo $PATH
+echo $PGDATA
+```
+
+Expected:
+
+```text
+/var/lib/pgsql/data
+```
+
+### Why PGDATA?
+
+With `PGDATA`:
+
+```bash
+pg_ctl status
+```
+
+can be used instead of:
+
+```bash
+pg_ctl -D /var/lib/pgsql/data status
+```
+
+---
+
+# PART XXI — AUTO-START AFTER REBOOT
+
+## 42. Lab Method — rc.local
+
+A manual source installation does not automatically become a Linux service.
+
+For the lab, configure:
+
+```text
+/etc/rc.d/rc.local
+```
+
+Add:
+
+```bash
 su - postgres -c '/usr/local/pgsql/bin/pg_ctl -D /var/lib/pgsql/data start'
+```
 
+Make executable:
 
-Make it executable:
+```bash
+chmod +x /etc/rc.d/rc.local
+```
 
-[root@mypg rc.d]# chmod +x /etc/rc.d/rc.local
+Reboot:
 
+```bash
+reboot
+```
 
-Then reboot:
+After reconnecting:
 
-[root@mypg rc.d]# reboot
+```bash
+ps -ef | grep postgres
+```
 
+---
 
-After reconnecting, verify:
+## 43. Production Method — systemd
 
-[root@mypg ~]# ps -ef | grep postgres
+For modern Linux production environments, prefer **systemd**.
 
+Benefits include:
 
-If PostgreSQL starts automatically, you should see the PostgreSQL server processes.
+* Service dependency management
+* Standard start/stop/restart control
+* Status monitoring
+* Logging integration
+* Failure handling
+* Restart policies
 
-PostgreSQL's documentation describes rc.local as one possible Linux startup approach and also provides a systemd-based approach. 
-P
-PostgreSQL
+Typical administration:
 
-30. PRODUCTION DBA NOTE — SYSTEMD
-
-For modern Linux production environments, systemd is generally preferable to relying on rc.local because it provides:
-
-Service dependency management
-Start/stop/restart control
-Service status
-Logging integration
-Failure handling
-Automatic restart policies
-Standard Linux service management
-
-PostgreSQL's documentation provides an example systemd service for source installations. 
-P
-PostgreSQL
-
-Typical administration becomes:
-
+```bash
 systemctl start postgresql
 systemctl stop postgresql
 systemctl restart postgresql
 systemctl reload postgresql
 systemctl status postgresql
+```
 
-Classroom Rule
+> **Classroom Rule**
 
-For the lab:
-
+```text
+Lab
+ ↓
 rc.local → Understand the concept
 
+Production
+ ↓
+systemd → Preferred approach
+```
 
-For a production Linux server:
+---
 
-systemd → Preferred service-management approach
+# PART XXII — UNINSTALLATION
 
+## 44. Stop PostgreSQL First
 
-Also ensure the PostgreSQL operating-system account is configured appropriately. PostgreSQL documentation discusses systemd and operating-system user considerations for source installations. 
-P
-PostgreSQL
+Switch to PostgreSQL user:
 
-UNINSTALLATION
-31. STOP POSTGRESQL FIRST
+```bash
+su - postgres
+```
 
-Before uninstalling PostgreSQL binaries:
+Check:
 
-[root@mypg ~]# su - postgres
+```bash
+pg_ctl status
+```
 
+Stop:
 
-Check status:
-
-[postgres@mypg ~]$ pg_ctl status
-
-
-Stop PostgreSQL:
-
-[postgres@mypg ~]$ pg_ctl stop
-
+```bash
+pg_ctl stop
+```
 
 Verify:
 
+```bash
 ps -ef | grep postgres
+```
 
-32. CLEAN THE SOURCE TREE
+---
 
-Move to the PostgreSQL source directory:
+## 45. Clean Source Tree
 
-[root@mypg ~]# cd /var/lib/pgsql/postgresql-18.4
+Move to:
 
+```bash
+cd /var/lib/pgsql/postgresql-18.4
+```
 
 Run:
 
-[root@mypg postgresql-18.4]# make clean
-
-Difference
+```bash
 make clean
+```
 
+### Difference
 
-removes generated build artifacts but keeps the configured source tree.
+`make clean` removes generated build artifacts while keeping the configured source tree.
 
-PostgreSQL documentation also provides:
+For a more complete reset:
 
+```bash
 make distclean
+```
 
+---
 
-when you want to return the source tree closer to its original distribution state and reconfigure it. 
-P
-PostgreSQL
+## 46. Uninstall PostgreSQL
 
-33. UNINSTALL POSTGRESQL SOFTWARE
+```bash
+make uninstall
+```
 
-Run:
+This removes files installed by the source installation.
 
-[root@mypg postgresql-18.4]# make uninstall
+It does **not** automatically remove separately created directories such as the database cluster.
 
+For contrib:
 
-PostgreSQL officially documents make uninstall as the method for undoing a source installation. It does not remove directories that were created separately. 
-P
-PostgreSQL
+```bash
+cd contrib/
+make clean
+make uninstall
+```
 
-Then uninstall the contrib installation:
+---
 
-[root@mypg postgresql-18.4]# cd contrib/
-[root@mypg contrib]# make clean
-[root@mypg contrib]# make uninstall
+## 47. Remove Installation Directory
 
+If no longer required:
 
-Verify:
+```bash
+rm -rf /usr/local/pgsql
+```
 
-[root@mypg contrib]# cd /usr/local/pgsql/bin/
-[root@mypg bin]# ls -ltr
+> **CRITICAL:** Before using `rm -rf`, verify:
 
-
-The PostgreSQL binaries should no longer be present after a successful uninstall.
-
-34. REMOVE THE INSTALLATION DIRECTORY
-
-If the directory is no longer required:
-
-[root@mypg ~]# rm -rf /usr/local/pgsql
-
-VERY IMPORTANT
-
-Do not execute rm -rf commands casually on a production server.
-
-Always verify the directory first:
-
+```bash
 pwd
 ls -ld /usr/local/pgsql
+```
 
+Never casually execute destructive commands on a production system.
 
-Then remove it only when you are certain that it contains the intended PostgreSQL installation.
+---
 
-35. DATA DIRECTORY
+## 48. Remove Data Directory — Destructive Operation
 
-The source-code uninstall operation does not automatically remove the PostgreSQL data directory.
+The source uninstall does **not** remove the database cluster.
 
-This is an important distinction:
+Conceptually:
 
+```text
 make uninstall
        ↓
-Remove installed PostgreSQL software
+Remove PostgreSQL software
        ↓
-Does NOT automatically remove database cluster
+Database cluster remains
+```
 
+Only if the entire lab is intentionally being destroyed:
 
-If the lab is being completely destroyed, the data directory can be removed separately:
+```bash
+rm -rf /var/lib/pgsql/data
+```
 
-[root@mypg ~]# rm -rf /var/lib/pgsql/data
+> **CRITICAL PRODUCTION WARNING**
+>
+> This permanently destroys the PostgreSQL cluster.
 
-CRITICAL PRODUCTION WARNING
+Before doing this, verify:
 
-This command permanently destroys the PostgreSQL cluster.
-
-Before executing it, verify:
-
-pg_ctl status
-
-
-and confirm:
-
+```text
 Correct server
 Correct PGDATA
 Correct environment
 Correct host
 Correct purpose
 Valid backup
+```
 
+Never remove `$PGDATA` merely because PostgreSQL software is being uninstalled.
 
-Never run:
+---
 
-rm -rf $PGDATA
+# PART XXIII — COMPLETE INSTALLATION FLOW
 
+## 49. DBA Memory Map
 
-or:
-
-rm -rf /var/lib/pgsql/data
-
-
-on production merely to “uninstall PostgreSQL.”
-
-36. FINAL INSTALLATION FLOW — DBA MEMORY MAP
-
-Remember the complete source installation process as:
-
+```text
 Linux Server
       |
       ↓
@@ -1383,10 +1434,10 @@ make
 make install
       |
       ↓
-make install in contrib
+Build/install contrib
       |
       ↓
-Validate pg_config / binaries
+Validate binaries
       |
       ↓
 Create PGDATA
@@ -1410,176 +1461,245 @@ Check Status
 Configure PATH / PGDATA
       |
       ↓
-Configure Auto Start
+Configure Auto-start
       |
       ↓
-Test Reboot
+Reboot Test
       |
       ↓
-Validate PostgreSQL
+Final Validation
+```
 
-37. IMPORTANT DBA CONCEPTS TO REMEMBER
-Concept 1 — Mount Point ≠ Physical Disk
+---
+
+# PART XXIV — IMPORTANT DBA CONCEPTS
+
+## 50. Mount Point ≠ Physical Disk
+
+```text
 Mount point
     ≠
 Physical storage device
-
+```
 
 Always verify the underlying storage architecture.
 
-Concept 2 — Connections ≠ TPS
+---
+
+## 51. Connections ≠ TPS
+
+```text
 Connections = Sessions
 TPS         = Transaction throughput
-
+```
 
 Eight connections do not mean eight TPS.
 
-Concept 3 — CPU Cores ≠ Connection Capacity
+---
+
+## 52. CPU Cores ≠ Connection Capacity
 
 Do not use:
 
+```text
 1 CPU = 4 connections
+```
 
+as a PostgreSQL sizing formula.
 
-as a PostgreSQL sizing rule.
+Base sizing on workload and performance measurements.
 
-Size CPU based on actual workload and performance measurements.
+---
 
-Concept 4 — RAM Is Workload Dependent
+## 53. RAM Is Workload Dependent
 
-Do not blindly use:
+Do not blindly apply:
 
+```text
 2 CPU = 8 GB
 4 CPU = 16 GB
+```
 
+to production.
 
-as a production sizing formula.
+Consider:
 
-Use workload characteristics, PostgreSQL memory settings, operating-system memory, connection count, and performance testing.
+* Workload
+* `shared_buffers`
+* `work_mem`
+* Connection count
+* OS memory
+* Query behavior
+* Performance testing
 
-Concept 5 — WAL Is Critical
+---
+
+## 54. WAL Is Critical
+
+Conceptually:
+
+```text
 Transaction
-    ↓
+     ↓
 WAL
-    ↓
+     ↓
 Durable storage
-    ↓
+     ↓
 Data files
+```
 
+WAL is fundamental to crash recovery, replication, archiving, and PITR.
 
-WAL is fundamental to PostgreSQL crash recovery and also enables continuous archiving and PITR. 
-P
-PostgreSQL
-+1
+---
 
-Concept 6 — Backup Must Be Tested
+## 55. Backup Must Be Tested
+
+```text
 Backup completed
        ≠
 Recovery guaranteed
+```
 
+A DBA should periodically perform restore/recovery testing.
 
-A DBA must periodically perform restore/recovery testing.
+---
 
-Concept 7 — RELOAD ≠ RESTART
+## 56. RELOAD ≠ RESTART
+
+```text
 RELOAD
    ↓
 Reread configuration
    ↓
 No database shutdown
+```
 
+versus:
 
-while:
-
+```text
 RESTART
    ↓
 Stop
    ↓
 Start
    ↓
-Downtime
+Service interruption
+```
 
+Whether a particular parameter requires reload or restart depends on its configuration context.
 
-Whether a configuration parameter requires reload or restart depends on that parameter's context. pg_ctl reload specifically rereads the PostgreSQL configuration files. 
-P
-PostgreSQL
+---
 
-Concept 8 — Software Installation ≠ Database Initialization
+## 57. Software Installation ≠ Database Initialization
 
-These are two different activities:
-
+```text
 make install
      ↓
 PostgreSQL software installed
+```
 
+versus:
 
-and:
-
+```text
 initdb
      ↓
 PostgreSQL database cluster created
+```
 
-Concept 9 — Extension Installation ≠ CREATE EXTENSION
-make install
-     ↓
-Extension files installed
+---
 
+## 58. Extension Installation ≠ CREATE EXTENSION
 
-then:
+```text
+Build/install extension files
+          ↓
+CREATE EXTENSION
+          ↓
+Extension enabled in database
+```
 
-CREATE EXTENSION extension_name;
+These are separate operations.
 
+---
 
-must be executed in the database where the extension is required. 
-P
-PostgreSQL
-+1
+# PART XXV — FINAL VALIDATION
 
-38. USEFUL DBA VALIDATION COMMANDS
+## 59. Binary Validation
 
-After installation, always perform basic validation:
-
+```bash
 which postgres
 which psql
 which pg_ctl
 which pg_config
+```
 
+---
+
+## 60. Version Validation
+
+```bash
 postgres --version
 psql --version
 pg_ctl --version
 pg_config --version
+```
 
+---
+
+## 61. Environment Validation
+
+```bash
 echo $PGDATA
+```
 
+---
+
+## 62. Server Validation
+
+```bash
 pg_ctl status
-
 ps -ef | grep postgres
-
 pg_isready
+```
 
+---
 
-Then connect:
+## 63. Database Validation
 
+Connect:
+
+```bash
 psql
-
+```
 
 Inside PostgreSQL:
 
+```sql
 SELECT version();
+```
 
+Then:
 
-and:
-
+```sql
 SHOW data_directory;
+```
 
-39. FINAL CLASSROOM SUMMARY
-PostgreSQL Source Installation
+---
+
+# PART XXVI — FINAL CLASSROOM SUMMARY
+
+## PostgreSQL Source Installation
+
+```text
 Prerequisites
+      ↓
+Capacity Planning
       ↓
 Download
       ↓
 Extract
       ↓
-configure
+./configure
       ↓
 make
       ↓
@@ -1598,11 +1718,13 @@ Validate
 Auto-start
       ↓
 Reboot Test
+```
 
-DBA Mindset
+## DBA Mindset
 
 Always think in terms of:
 
+```text
 Capacity
    +
 Performance
@@ -1616,16 +1738,40 @@ Backup
 Recovery
    +
 Monitoring
+```
 
+### Core DBA Principles
 
-A PostgreSQL DBA should not only know how to install PostgreSQL, but also understand why each component is required, what happens internally, how storage and memory affect performance, and how the database can be recovered when something fails.
+> **Installation is only the beginning.**
 
-Official PostgreSQL References
-PostgreSQL 18 — Installation from Source Code
-PostgreSQL 18 — Source Build with Autoconf and Make
-PostgreSQL 18 — pg_ctl
-PostgreSQL 18 — Database File Layout
-PostgreSQL 18 — WAL Internals
-PostgreSQL 18 — Continuous Archiving and PITR
-PostgreSQL 18 — Backup and Restore
-PostgreSQL 18 — Installation Requirements
+A PostgreSQL DBA should understand:
+
+* Why each component exists
+* How PostgreSQL uses storage
+* How WAL supports durability and recovery
+* How memory and CPU affect performance
+* How connections differ from workload throughput
+* How authentication protects the server
+* How configuration reload and restart differ
+* How backups are restored
+* How PITR works
+* How PostgreSQL starts and stops
+* How failures are handled
+* How recovery is tested
+
+---
+
+# OFFICIAL REFERENCE SECTION
+
+Use these as the authoritative documentation section for the class:
+
+1. PostgreSQL 18 — Installation from Source Code
+2. PostgreSQL 18 — Source Build with Autoconf and Make
+3. PostgreSQL 18 — `pg_ctl`
+4. PostgreSQL 18 — Database File Layout
+5. PostgreSQL 18 — WAL Internals
+6. PostgreSQL 18 — Continuous Archiving and PITR
+7. PostgreSQL 18 — Backup and Restore
+8. PostgreSQL 18 — Installation Requirements
+
+This segregation also makes the material much more suitable as **DBA training notes**: prerequisites → capacity → storage → installation → initialization → administration → startup → uninstallation → validation → DBA concepts.

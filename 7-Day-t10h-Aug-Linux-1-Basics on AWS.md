@@ -1,4 +1,4 @@
-Day:6-Linux-1-Basics on AWS
+Day:7-Linux-1-Basics on AWS
 
 # Linux Setup & Linux Basics — Properly Segregated
 

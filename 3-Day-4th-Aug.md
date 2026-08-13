@@ -1,6 +1,6 @@
 # PostgreSQL Database Administration — Course Outline
 
-**Day 3 — 5th August 2026**
+**Day 3 — 4th August 2026**
 
 ---
 

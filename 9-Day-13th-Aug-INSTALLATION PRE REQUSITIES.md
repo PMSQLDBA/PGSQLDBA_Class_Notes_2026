@@ -1,9 +1,13 @@
 # PostgreSQL 18 — Source Code Installation & DBA Prerequisites
 
 **Class Date:** 13 August 2026
+
 **Lab Version:** PostgreSQL 18.4
+
 **Current 18.x Minor Release:** PostgreSQL 18.6
+
 **Installation Method:** Source Code / Autoconf + Make
+
 **Primary OS Context:** Linux
 
 > **Version Note:** PostgreSQL 18.4 is retained as the historical lab example. For a fresh installation, normally use the latest supported PostgreSQL 18 minor release unless the project specifically requires 18.4.

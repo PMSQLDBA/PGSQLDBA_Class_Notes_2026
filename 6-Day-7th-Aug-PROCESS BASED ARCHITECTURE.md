@@ -1,6 +1,6 @@
 # PostgreSQL Database Administration — Course Outline
 
-**Day 5**
+**Day 6**
 
 ---
 

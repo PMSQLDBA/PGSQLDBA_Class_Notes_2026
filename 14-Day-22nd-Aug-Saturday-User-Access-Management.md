@@ -1,5 +1,5 @@
-# PostgreSQL Class Notes
 **PostgreSQL Version Used in Examples:** PostgreSQL 18
+
 **Class Date:** 22 August 2026
 
 ## User Access Management, Privileges, Roles, and Physical Storage

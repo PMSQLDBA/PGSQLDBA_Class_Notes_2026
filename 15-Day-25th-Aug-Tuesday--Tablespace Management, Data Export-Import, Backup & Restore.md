@@ -7,6 +7,7 @@ Cover tablespaces, `COPY`, logical backup/restore, physical backup, and incremen
 ## Tablespace Management, Data Export/Import, Backup & Restore
 
 **Date: 25 August 2026**
+
 **PostgreSQL Version Used in Examples: PostgreSQL 18**
 
 ---

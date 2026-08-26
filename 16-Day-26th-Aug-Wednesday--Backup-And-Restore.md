@@ -1,7 +1,7 @@
 # PostgreSQL 18 – Backup and Restore (16-Day-26th-Aug-Wednesday)
 
 ## Class Notes with Real-Time Practice Scenarios
-
+e
 **Topic:** PostgreSQL Logical and Physical Backup & Restore
 
 **Version:** PostgreSQL 18
@@ -12,15 +12,15 @@
 
 In particular: 
 
-tar dumps do not support compression; 
+1) tar dumps do not support compression; 
 
-parallel `pg_dump` requires directory format and uses `jobs + 1` connections; 
+2) parallel `pg_dump` requires directory format and uses `jobs + 1` connections; 
 
-parallel `pg_restore` works with custom/directory archives; 
+3) parallel `pg_restore` works with custom/directory archives; 
 
-`summarize_wal` is required for incremental physical backups; 
+4) `summarize_wal` is required for incremental physical backups; 
 
-and dependent incremental backups must be combined oldest-to-newest. ([PostgreSQL][1])
+5) dependent incremental backups must be combined oldest-to-newest. ([PostgreSQL][1])
 
 ---
 

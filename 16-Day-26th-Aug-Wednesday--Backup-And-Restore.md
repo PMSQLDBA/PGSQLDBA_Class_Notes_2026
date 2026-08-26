@@ -3,8 +3,11 @@
 ## Class Notes with Real-Time Practice Scenarios
 
 **Topic:** PostgreSQL Logical and Physical Backup & Restore
+
 **Version:** PostgreSQL 18
+
 **Level:** Beginner → Intermediate → Production DBA
+
 **Focus:** `pg_dump`, `pg_restore`, `pg_dumpall`, `pg_basebackup`, `pg_verifybackup`, `pg_combinebackup`, WAL Archiving and Incremental Backup
 
 In particular: 

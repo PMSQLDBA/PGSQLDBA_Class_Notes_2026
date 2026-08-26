@@ -11,10 +11,15 @@
 **Focus:** `pg_dump`, `pg_restore`, `pg_dumpall`, `pg_basebackup`, `pg_verifybackup`, `pg_combinebackup`, WAL Archiving and Incremental Backup
 
 In particular: 
+
 tar dumps do not support compression; 
+
 parallel `pg_dump` requires directory format and uses `jobs + 1` connections; 
+
 parallel `pg_restore` works with custom/directory archives; 
+
 `summarize_wal` is required for incremental physical backups; 
+
 and dependent incremental backups must be combined oldest-to-newest. ([PostgreSQL][1])
 
 ---

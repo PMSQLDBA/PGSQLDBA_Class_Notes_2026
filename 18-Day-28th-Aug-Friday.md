@@ -121,13 +121,13 @@ The PostgreSQL query planner uses these statistics when generating execution pla
 
 If statistics become outdated, PostgreSQL may make inaccurate row-count estimates.
 
-Trainer command:
+Command:
 
 ```sql
 ANALYZE emp;
 ```
 
-Verbose form used in class:
+Verbose form:
 
 ```sql
 ANALYZE VERBOSE emp;
@@ -176,7 +176,7 @@ VALUES
 );
 ```
 
-The trainer executed the same insert five times.
+The same insert was executed five times during the class.
 
 ```sql
 INSERT INTO emp
@@ -236,7 +236,7 @@ Result:
 
 # 8. Check Table Statistics
 
-Trainer query:
+Query:
 
 ```sql
 SELECT
@@ -257,7 +257,7 @@ Initially:
 
 # 9. Execution Plan Before ANALYZE
 
-Trainer command:
+Command:
 
 ```sql
 EXPLAIN SELECT * FROM emp;
@@ -275,13 +275,13 @@ Actual rows:
 
 # 10. Run ANALYZE
 
-Trainer command:
+Command:
 
 ```sql
 ANALYZE VERBOSE emp;
 ```
 
-The trainer also checked:
+Check:
 
 ```sql
 SHOW default_statistics_target;
@@ -291,7 +291,7 @@ Result:
 
 `100`
 
-Then changed it:
+Change it:
 
 ```sql
 SET default_statistics_target TO 200;
@@ -311,7 +311,7 @@ After this, PostgreSQL estimated approximately:
 
 # 11. default_statistics_target
 
-Trainer commands:
+Commands:
 
 ```sql
 SHOW default_statistics_target;
@@ -329,7 +329,7 @@ ANALYZE VERBOSE emp;
 
 # 12. Execution Plan After ANALYZE
 
-Trainer command:
+Command:
 
 ```sql
 EXPLAIN SELECT * FROM emp;
@@ -343,17 +343,17 @@ After ANALYZE:
 
 # 13. PostgreSQL Relation File
 
-Trainer command:
+Command:
 
 ```sql
 SELECT pg_relation_filepath('emp');
 ```
 
-Result in the class:
+Result:
 
 `base/5/16932`
 
-The trainer also calculated approximate table pages:
+Calculate approximate table pages:
 
 ```sql
 SELECT 36760*8;
@@ -443,7 +443,7 @@ Class result:
 
 No.
 
-Trainer command:
+Command:
 
 ```sql
 ANALYZE emp;
@@ -469,7 +469,7 @@ The dead tuples were still present.
 
 Normal `VACUUM` processes dead tuples that are safe to remove and makes their space available for reuse inside the table.
 
-Trainer command:
+Command:
 
 ```sql
 VACUUM VERBOSE emp;
@@ -508,7 +508,7 @@ VACUUM maintains this information.
 
 # 20. VACUUM Lab Result
 
-Trainer command:
+Command:
 
 ```sql
 VACUUM VERBOSE emp;
@@ -575,7 +575,7 @@ Normal VACUUM makes the space reusable internally.
 
 Normal VACUUM is intended to operate with normal workload activity.
 
-Trainer observation:
+Class observation:
 
 `At any point of time we can run vacuum operation.`
 
@@ -585,7 +585,7 @@ Trainer observation:
 
 `VACUUM FULL` is used to physically rewrite a table and reclaim unused disk space.
 
-Trainer command:
+Command:
 
 ```sql
 VACUUM FULL emp;
@@ -621,7 +621,7 @@ Conceptually:
 
 VACUUM FULL requires an exclusive table lock.
 
-The trainer emphasized that it should be planned during a maintenance window.
+It should be planned during a maintenance window.
 
 ---
 
@@ -633,7 +633,7 @@ VACUUM FULL requires additional working disk space because the table is rewritte
 
 # 27. maintenance_work_mem
 
-Trainer command:
+Check:
 
 ```sql
 SHOW maintenance_work_mem;
@@ -715,7 +715,7 @@ Result:
 
 This demonstrated that the table was rewritten.
 
-The trainer then ran:
+Then run:
 
 ```sql
 VACUUM VERBOSE emp;
@@ -740,7 +740,7 @@ VACUUM VERBOSE emp;
 
 # 31. Table Bloat Detection
 
-The trainer used the following complete bloat-estimation query:
+Use the following bloat-estimation query:
 
 ```sql
 WITH constants AS
@@ -1043,7 +1043,7 @@ SELECT
 FROM bloat_data;
 ```
 
-The trainer's result for `emp` was approximately:
+Class result for `emp` was approximately:
 
 * Estimated rows: `2500000`
 * Bloat percentage: `50%`
@@ -1054,7 +1054,7 @@ The trainer's result for `emp` was approximately:
 
 # 32. Deciding When to Run VACUUM FULL
 
-The trainer discussed the following operational examples:
+Class operational examples:
 
 For smaller tables:
 
@@ -1073,17 +1073,17 @@ Example:
 * Bloat: `1 GB`
 * Bloat percentage: `25%`
 
-These were class operational examples for identifying candidates for VACUUM FULL.
+These are operational examples for identifying possible VACUUM FULL candidates.
 
 ---
 
 # 33. Online Alternative for Table Reorganization
 
-The trainer mentioned:
+The third-party utility mentioned in class was:
 
 `pg_repack`
 
-It can be used as a third-party alternative where lower blocking is required compared with VACUUM FULL.
+It can be used as an alternative where lower blocking is required compared with VACUUM FULL.
 
 ---
 
@@ -1091,7 +1091,7 @@ It can be used as a third-party alternative where lower blocking is required com
 
 REINDEX is used when an index requires rebuilding.
 
-Trainer check for invalid indexes:
+Check for invalid indexes:
 
 ```sql
 SELECT
@@ -1110,7 +1110,7 @@ Class result:
 
 # 35. REINDEX a Table
 
-Trainer command:
+Command:
 
 ```sql
 REINDEX TABLE emp;
@@ -1126,7 +1126,7 @@ REINDEX TABLE CONCURRENTLY emp;
 
 # 36. REINDEX a Database
 
-Trainer command:
+Command:
 
 ```sql
 REINDEX DATABASE postgres;
@@ -1159,9 +1159,9 @@ REINDEX INDEX CONCURRENTLY emp_idx;
 
 # 38. VACUUM FULL and Indexes
 
-The trainer's question:
+Question:
 
-**If EMP has an index and we run VACUUM FULL, do we still need REINDEX?**
+**If EMP has an index and VACUUM FULL is performed, do we still need REINDEX?**
 
 Answer:
 
@@ -1173,7 +1173,7 @@ VACUUM FULL rewrites the table and rebuilds its indexes.
 
 # 39. ANALYZE Entire Database
 
-Trainer command:
+Command:
 
 ```sql
 ANALYZE;
@@ -1183,7 +1183,7 @@ ANALYZE;
 
 # 40. VACUUM Entire Database
 
-Trainer command:
+Command:
 
 ```sql
 VACUUM;
@@ -1193,7 +1193,7 @@ VACUUM;
 
 # 41. VACUUM FULL Entire Database
 
-Trainer command:
+Command:
 
 ```sql
 VACUUM FULL;
@@ -1203,7 +1203,7 @@ VACUUM FULL;
 
 # 42. Create Additional Tables for Maintenance Testing
 
-Trainer first checked:
+Check tables:
 
 ```text
 \dt
@@ -1247,13 +1247,13 @@ Tables created:
 
 # 43. PostgreSQL Maintenance Utilities
 
-Trainer moved to:
+Move to:
 
 ```bash
 cd /usr/pgsql-18/bin/
 ```
 
-Then:
+List utilities:
 
 ```bash
 ls -ltr
@@ -1279,7 +1279,7 @@ Important utilities include:
 
 # 45. VACUUM All Databases
 
-Trainer command:
+Command:
 
 ```bash
 vacuumdb -a
@@ -1303,7 +1303,7 @@ It processed databases such as:
 
 # 46. VACUUM a Single Database
 
-Trainer command:
+Command:
 
 ```bash
 vacuumdb -d postgres
@@ -1313,7 +1313,7 @@ vacuumdb -d postgres
 
 # 47. VACUUM Specific Tables
 
-Trainer command:
+Command:
 
 ```bash
 vacuumdb -d postgres \
@@ -1326,7 +1326,7 @@ vacuumdb -d postgres \
 
 # 48. VACUUM + ANALYZE
 
-Trainer command:
+Command:
 
 ```bash
 vacuumdb -d postgres \
@@ -1342,7 +1342,7 @@ vacuumdb -d postgres \
 
 # 49. ANALYZE Only
 
-Trainer command:
+Command:
 
 ```bash
 vacuumdb -d postgres \
@@ -1358,7 +1358,7 @@ Capital `-Z` means ANALYZE only.
 
 # 50. VACUUM FULL Using vacuumdb
 
-Trainer command:
+Command:
 
 ```bash
 vacuumdb -d postgres \
@@ -1374,7 +1374,7 @@ vacuumdb -d postgres \
 
 # 51. REINDEX Command-Line Utility
 
-The trainer showed the utility:
+The utility is:
 
 `/usr/pgsql-18/bin/reindexdb`
 
@@ -1386,7 +1386,7 @@ This is used for command-line index maintenance.
 
 PostgreSQL provides autovacuum for automatic VACUUM and ANALYZE maintenance.
 
-Trainer query:
+Check:
 
 ```sql
 SHOW autovacuum;
@@ -1418,7 +1418,7 @@ Default class value:
 
 # 54. Check Autovacuum Settings
 
-Trainer query:
+Query:
 
 ```sql
 SELECT
@@ -1429,7 +1429,7 @@ FROM pg_settings
 WHERE name LIKE '%autovacuum%';
 ```
 
-The trainer reviewed settings such as:
+Important settings reviewed:
 
 * `autovacuum`
 * `autovacuum_analyze_scale_factor`
@@ -1465,7 +1465,7 @@ Class explanation:
 
 `50 updates/deletes + 20% growth`
 
-A simplified formula is:
+Simplified formula:
 
 `autovacuum_vacuum_threshold`
 
@@ -1493,7 +1493,7 @@ Simplified formula:
 
 # 57. autovacuum_naptime
 
-Trainer setting:
+Class setting:
 
 `autovacuum_naptime = 60`
 
@@ -1501,7 +1501,7 @@ Trainer setting:
 
 # 58. autovacuum_max_workers
 
-Trainer setting:
+Class setting:
 
 `autovacuum_max_workers = 3`
 
@@ -1509,7 +1509,7 @@ Trainer setting:
 
 # 59. autovacuum_freeze_max_age
 
-Trainer setting:
+Class setting:
 
 `autovacuum_freeze_max_age = 200000000`
 
@@ -1517,7 +1517,7 @@ Trainer setting:
 
 # 60. Temporarily Disable Autovacuum for Lab Testing
 
-Trainer first checked:
+Check:
 
 ```sql
 SHOW autovacuum;
@@ -1599,7 +1599,7 @@ Verify:
 ps -ef | grep postgres
 ```
 
-The trainer later observed:
+The process list later showed:
 
 `postgres: autovacuum launcher`
 
@@ -1607,7 +1607,7 @@ The trainer later observed:
 
 # 62. Monitor Autovacuum Activity
 
-Trainer query:
+Query:
 
 ```sql
 SELECT
@@ -1658,7 +1658,7 @@ SELECT
 FROM pg_stat_user_tables;
 ```
 
-Later, the trainer checked again:
+Check again later:
 
 ```sql
 SELECT
@@ -1680,19 +1680,19 @@ SELECT now();
 
 # 64. Autovacuum on Busy Tables
 
-The class observed that busy tables need careful monitoring and may require manual maintenance planning when automatic maintenance cannot keep up.
+Busy tables need careful monitoring and may require manual maintenance planning when automatic maintenance cannot keep up.
 
 ---
 
 # 65. Should We Rely on Autovacuum?
 
-The trainer recommended monitoring autovacuum and also planning manual VACUUM and ANALYZE where required.
+Autovacuum should be monitored, and manual VACUUM and ANALYZE can be planned where required.
 
 ---
 
 # 66. Manual Maintenance Strategy
 
-Trainer's scheduling examples:
+Class scheduling examples:
 
 * Tables below `5 GB` – daily VACUUM + ANALYZE
 * Tables above `5 GB` and below `100 GB` – weekly
@@ -1710,7 +1710,7 @@ Check existing cron entries:
 crontab -l
 ```
 
-Trainer initially received:
+Initial result:
 
 `no crontab for postgres`
 
@@ -1720,7 +1720,7 @@ Edit:
 crontab -e
 ```
 
-Trainer scheduled:
+Schedule:
 
 ```text
 0 1 * * * vacuumdb -d postgres -t emp -t hr -t dept -z
@@ -1742,7 +1742,7 @@ Result:
 
 # 68. Cron Format
 
-Trainer explained:
+Cron format:
 
 ```text
 Minute  Hour  Day  Month  Weekday
@@ -1772,7 +1772,7 @@ Means:
 
 # 69. Every Monday Example
 
-Trainer example:
+Example:
 
 ```text
 0 0 * * MON
@@ -1784,11 +1784,9 @@ Means:
 
 ---
 
-# 70. Production Cron Recommendation
+# 70. Maintenance Cron Command
 
-For production, the executable can be referenced using the complete PostgreSQL binary path.
-
-Trainer's maintenance command itself was:
+The maintenance command used was:
 
 ```bash
 vacuumdb -d postgres \
@@ -1908,8 +1906,6 @@ SELECT pg_relation_filepath('emp');
 
 ### Table Size
 
-Trainer command:
-
 ```text
 \dt+ emp
 ```
@@ -1984,8 +1980,6 @@ Trainer command:
 
 Update optimizer statistics.
 
-Trainer command:
-
 ```sql
 ANALYZE emp;
 ```
@@ -1993,8 +1987,6 @@ ANALYZE emp;
 ### VACUUM
 
 Clean dead tuples and make their space reusable.
-
-Trainer command:
 
 ```sql
 VACUUM VERBOSE emp;
@@ -2004,8 +1996,6 @@ VACUUM VERBOSE emp;
 
 Rewrite the table and reclaim physical storage.
 
-Trainer command:
-
 ```sql
 VACUUM FULL emp;
 ```
@@ -2013,8 +2003,6 @@ VACUUM FULL emp;
 ### REINDEX
 
 Rebuild indexes.
-
-Trainer commands:
 
 ```sql
 REINDEX TABLE emp;
@@ -2107,10 +2095,10 @@ vacuumdb -d postgres \
 -f
 ```
 
-Cron example used by the trainer:
+Cron example:
 
 ```text
 0 1 * * * vacuumdb -d postgres -t emp -t hr -t dept -z
 ```
 
-This is the **same previous class-note structure**, now with the trainer’s actual scripts inserted into the matching sections rather than creating a different set of notes.
+This version keeps the same class-note structure and content, with all references made neutral and without mentioning any trainer. 

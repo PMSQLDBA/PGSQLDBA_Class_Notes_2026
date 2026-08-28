@@ -2,8 +2,6 @@
 
 **Class Date:** 28th August 2026 – Friday
 
-These class notes cover PostgreSQL database maintenance activities demonstrated in the supplied session, including **ANALYZE, VACUUM, VACUUM FULL, REINDEX, AUTOVACUUM, bloat identification, vacuumdb utilities, and maintenance scheduling**. 
-
 ---
 
 ## 1. Objective
@@ -54,17 +52,9 @@ Accurate statistics help PostgreSQL choose better execution plans.
 
 In PostgreSQL terminology, a **tuple** generally represents a table row.
 
-For example, if a table contains 100 records, it contains approximately 100 logical rows or tuples.
-
 ### Attribute
 
 An **attribute** represents a table column.
-
-For example:
-
-`emp(eno, ename, esal, eaddr)`
-
-contains four attributes.
 
 ### Dead Tuple
 
@@ -74,7 +64,7 @@ When a row is updated or deleted, the old row version does not necessarily disap
 
 That old row version can eventually become a **dead tuple** when it is no longer visible to any transaction.
 
-For example:
+Example:
 
 * Table contains 100 rows
 * Delete 50 rows
@@ -87,7 +77,7 @@ VACUUM can then make the space occupied by removable dead tuples available for r
 
 # 3. What is Bloat?
 
-**Bloat** generally refers to space in tables or indexes that is no longer efficiently used because of PostgreSQL's MVCC behavior, updates, deletes, page layout, and other storage effects.
+**Bloat** generally refers to space in tables or indexes that is no longer efficiently used.
 
 Example:
 
@@ -96,8 +86,6 @@ Example:
 * Table file may still remain close to `10 GB`
 
 Normal VACUUM can make dead-tuple space reusable internally, but it normally does not return that space to the operating system.
-
-This unused or inefficiently used space is commonly referred to as **table bloat**.
 
 Indexes can also become bloated.
 
@@ -109,29 +97,15 @@ When checking PostgreSQL storage, distinguish between the table itself and the t
 
 ### Table Only
 
-Use:
-
 `pg_table_size()`
 
-This measures the table and related storage such as TOAST, but excludes indexes.
-
 ### Indexes Only
-
-Use:
 
 `pg_indexes_size()`
 
 ### Table + Indexes
 
-Use:
-
 `pg_total_relation_size()`
-
-Example:
-
-`SELECT pg_size_pretty(pg_total_relation_size('emp'));`
-
-This provides the total disk space associated with the table, including its indexes.
 
 ---
 
@@ -145,15 +119,19 @@ The PostgreSQL query planner uses these statistics when generating execution pla
 
 **Update optimizer statistics.**
 
-If statistics become outdated, PostgreSQL may make inaccurate row-count estimates and potentially choose inefficient execution plans.
+If statistics become outdated, PostgreSQL may make inaccurate row-count estimates.
 
-Run ANALYZE for a table using:
+Trainer command:
 
-`ANALYZE emp;`
+```sql
+ANALYZE emp;
+```
 
-For additional information during execution:
+Verbose form used in class:
 
-`ANALYZE VERBOSE emp;`
+```sql
+ANALYZE VERBOSE emp;
+```
 
 ---
 
@@ -168,9 +146,6 @@ ANALYZE:
 * Does not rebuild the table
 * Does not remove table bloat
 * Does not remove dead tuples
-* Normally requires much less intrusive locking than operations such as VACUUM FULL
-
-ANALYZE does take a lightweight table lock, so it is better to say that it generally **does not block normal reads and writes**, rather than saying that it takes no lock at all.
 
 ---
 
@@ -178,200 +153,289 @@ ANALYZE does take a lightweight table lock, so it is better to say that it gener
 
 Create the test table.
 
-**SQL:**
+```sql
+CREATE TABLE emp
+(
+    eno int,
+    ename varchar,
+    esal int,
+    eaddr varchar
+);
+```
 
-`CREATE TABLE emp`
+Load 1,000,000 rows.
 
-`(eno int, ename varchar, esal int, eaddr varchar);`
+```sql
+INSERT INTO emp
+VALUES
+(
+    generate_series(1,1000000),
+    'emp'||generate_series(1,1000000),
+    generate_series(1,1000000),
+    'addr'||generate_series(1,1000000)
+);
+```
 
-Load data into the table.
+The trainer executed the same insert five times.
 
-The class loaded 1,000,000 rows five times.
+```sql
+INSERT INTO emp
+VALUES
+(
+    generate_series(1,1000000),
+    'emp'||generate_series(1,1000000),
+    generate_series(1,1000000),
+    'addr'||generate_series(1,1000000)
+);
+```
 
-After loading, verify the row count.
+```sql
+INSERT INTO emp
+VALUES
+(
+    generate_series(1,1000000),
+    'emp'||generate_series(1,1000000),
+    generate_series(1,1000000),
+    'addr'||generate_series(1,1000000)
+);
+```
 
-**SQL:**
+```sql
+INSERT INTO emp
+VALUES
+(
+    generate_series(1,1000000),
+    'emp'||generate_series(1,1000000),
+    generate_series(1,1000000),
+    'addr'||generate_series(1,1000000)
+);
+```
 
-`SELECT count(*) FROM emp;`
+```sql
+INSERT INTO emp
+VALUES
+(
+    generate_series(1,1000000),
+    'emp'||generate_series(1,1000000),
+    generate_series(1,1000000),
+    'addr'||generate_series(1,1000000)
+);
+```
+
+Verify the row count.
+
+```sql
+SELECT count(*) FROM emp;
+```
 
 Result:
 
 `5000000`
 
-The table now contains **5 million rows**.
-
 ---
 
 # 8. Check Table Statistics
 
-Use:
+Trainer query:
 
-`SELECT relname, last_vacuum, last_analyze, n_dead_tup`
+```sql
+SELECT
+    relname,
+    last_vacuum,
+    last_analyze,
+    n_dead_tup
+FROM pg_stat_user_tables;
+```
 
-`FROM pg_stat_user_tables;`
-
-Initially, the class showed:
+Initially:
 
 * `last_vacuum` – empty
 * `last_analyze` – empty
 * `n_dead_tup` – `0`
 
-This means no manual VACUUM or ANALYZE had yet been recorded for the test table.
-
 ---
 
 # 9. Execution Plan Before ANALYZE
 
-Run:
+Trainer command:
 
-`EXPLAIN SELECT * FROM emp;`
+```sql
+EXPLAIN SELECT * FROM emp;
+```
 
-Before accurate statistics were available, PostgreSQL estimated approximately:
+Before updated statistics, PostgreSQL estimated approximately:
 
 `2977560 rows`
 
-However, the table actually contained:
+Actual rows:
 
-`5000000 rows`
-
-This demonstrates why current statistics are important.
+`5000000`
 
 ---
 
 # 10. Run ANALYZE
 
-Run:
+Trainer command:
 
-`ANALYZE VERBOSE emp;`
+```sql
+ANALYZE VERBOSE emp;
+```
 
-PostgreSQL collected statistics from the table.
+The trainer also checked:
 
-The class output estimated approximately:
+```sql
+SHOW default_statistics_target;
+```
 
-`5000016 rows`
+Result:
 
-This was much closer to the actual 5 million rows.
+`100`
+
+Then changed it:
+
+```sql
+SET default_statistics_target TO 200;
+```
+
+Run ANALYZE again:
+
+```sql
+ANALYZE VERBOSE emp;
+```
+
+After this, PostgreSQL estimated approximately:
+
+`5000000 rows`
 
 ---
 
 # 11. default_statistics_target
 
-Check:
+Trainer commands:
 
-`SHOW default_statistics_target;`
+```sql
+SHOW default_statistics_target;
+```
 
-The class value was:
+```sql
+SET default_statistics_target TO 200;
+```
 
-`100`
-
-The session changed it temporarily to:
-
-`200`
-
-**SQL:**
-
-`SET default_statistics_target TO 200;`
-
-Then:
-
-`ANALYZE VERBOSE emp;`
-
-A higher statistics target can cause PostgreSQL to collect more detailed statistics, potentially improving estimates for some data distributions.
-
-However, it can also increase:
-
-* ANALYZE time
-* Statistics storage
-* Planning overhead
-
-Therefore, increasing it globally should be based on an actual requirement rather than done automatically for every database.
+```sql
+ANALYZE VERBOSE emp;
+```
 
 ---
 
 # 12. Execution Plan After ANALYZE
 
-Run:
+Trainer command:
 
-`EXPLAIN SELECT * FROM emp;`
+```sql
+EXPLAIN SELECT * FROM emp;
+```
 
-After ANALYZE, the class showed:
+After ANALYZE:
 
 `rows=5000000`
-
-This matched the actual row count much more closely.
-
-This demonstrates the relationship:
-
-**Accurate Statistics**
-
-↓
-
-**Better Cardinality Estimates**
-
-↓
-
-**Better Information for Query Planner**
-
-↓
-
-**Potentially Better Execution Plans**
 
 ---
 
 # 13. PostgreSQL Relation File
 
-To find the physical relation path:
+Trainer command:
 
-`SELECT pg_relation_filepath('emp');`
+```sql
+SELECT pg_relation_filepath('emp');
+```
 
-The class initially showed:
+Result in the class:
 
 `base/5/16932`
 
-This represents the relation file path relative to the PostgreSQL data directory.
+The trainer also calculated approximate table pages:
+
+```sql
+SELECT 36760*8;
+```
+
+Result:
+
+`294080`
+
+Then:
+
+```sql
+SELECT 294080/1024;
+```
+
+Result:
+
+`287`
+
+This matched the approximate table size of `287 MB`.
 
 ---
 
 # 14. Create Dead Tuples
 
-The table initially contained:
+Verify the current rows:
 
-`5000000 rows`
+```sql
+SELECT count(*) FROM emp;
+```
 
-The class deleted:
+Result:
 
-`2500000 rows`
+`5000000`
+
+Delete rows:
+
+```sql
+DELETE FROM emp
+WHERE eno <= 500000;
+```
+
+Result:
+
+`DELETE 2500000`
 
 Verify:
 
-`SELECT count(*) FROM emp;`
+```sql
+SELECT count(*) FROM emp;
+```
 
 Result:
 
 `2500000`
 
-Check the table size:
+Check table size:
 
-`\dt+ emp`
+```text
+\dt+ emp
+```
 
-The table still showed approximately:
+Result:
 
-`287 MB`
+Approximately `287 MB`
 
-Check table statistics:
+Check live and dead tuples:
 
-`SELECT relname, n_live_tup, n_dead_tup,`
+```sql
+SELECT
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    last_vacuum,
+    last_analyze
+FROM pg_stat_user_tables;
+```
 
-`last_vacuum, last_analyze`
+Class result:
 
-`FROM pg_stat_user_tables;`
-
-The result showed approximately:
-
-* Live tuples: `2500000`
-* Dead tuples: `2500000`
-
-This demonstrates PostgreSQL's MVCC behavior.
+* `n_live_tup = 2500000`
+* `n_dead_tup = 2500000`
 
 ---
 
@@ -379,18 +443,25 @@ This demonstrates PostgreSQL's MVCC behavior.
 
 No.
 
-The class executed:
+Trainer command:
 
-`ANALYZE emp;`
+```sql
+ANALYZE emp;
+```
 
-After ANALYZE:
+Check again:
 
-* `n_live_tup` remained around `2500000`
-* `n_dead_tup` remained around `2500000`
+```sql
+SELECT
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    last_vacuum,
+    last_analyze
+FROM pg_stat_user_tables;
+```
 
-ANALYZE updates statistics.
-
-It does **not** perform the normal dead-tuple cleanup work of VACUUM.
+The dead tuples were still present.
 
 ---
 
@@ -398,84 +469,87 @@ It does **not** perform the normal dead-tuple cleanup work of VACUUM.
 
 Normal `VACUUM` processes dead tuples that are safe to remove and makes their space available for reuse inside the table.
 
-Run:
+Trainer command:
 
-`VACUUM emp;`
-
-For detailed output:
-
-`VACUUM VERBOSE emp;`
-
-### Main Purpose
-
-**Clean up removable dead tuples and make their space reusable.**
+```sql
+VACUUM VERBOSE emp;
+```
 
 ---
 
 # 17. What VACUUM Does
 
-VACUUM performs several important functions:
+VACUUM:
 
-* Processes dead tuples that are safe to remove
-* Makes reusable space available through the Free Space Map
-* Updates the Visibility Map where appropriate
-* Maintains visibility information
-* Helps support index-only scans
-* Advances tuple freezing information
-* Helps prevent transaction ID wraparound
-* Updates maintenance statistics
-
-Normal VACUUM does not generally shrink the physical table file to its minimum possible size.
+* Processes removable dead tuples
+* Makes space reusable
+* Updates Free Space Map
+* Updates Visibility Map
+* Helps transaction ID maintenance
+* Supports index-only scans
 
 ---
 
 # 18. Free Space Map
 
-The **Free Space Map (FSM)** tracks available space inside table and index pages.
+The **Free Space Map (FSM)** tracks available space inside PostgreSQL pages.
 
-PostgreSQL can use this information when inserting or updating rows.
-
-After VACUUM processes dead tuples, reusable space can be recorded so PostgreSQL can use that space for future data.
+VACUUM makes freed locations available for future reuse.
 
 ---
 
 # 19. Visibility Map
 
-The **Visibility Map (VM)** tracks pages where tuples are known to be visible to all transactions and pages where tuples are frozen.
+The **Visibility Map (VM)** tracks pages containing tuples that are visible to all transactions and pages that are fully frozen.
 
-It is important for:
-
-* Vacuum optimization
-* Index-only scans
-* Transaction ID maintenance
-
-VACUUM updates visibility information as appropriate.
+VACUUM maintains this information.
 
 ---
 
 # 20. VACUUM Lab Result
 
-The class executed:
+Trainer command:
 
-`VACUUM VERBOSE emp;`
+```sql
+VACUUM VERBOSE emp;
+```
+
+Check table statistics:
+
+```sql
+SELECT
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    last_vacuum,
+    last_analyze
+FROM pg_stat_user_tables;
+```
 
 After VACUUM:
 
-* Live tuples: approximately `2500000`
+* Live tuples: `2500000`
 * Dead tuples: `0`
-* `last_vacuum` was updated
 
-However:
+Check size:
 
-`\dt+ emp`
+```text
+\dt+ emp
+```
 
-still showed approximately:
+The table still showed approximately:
 
 `287 MB`
 
-This is expected.
+Check physical file:
 
-Normal VACUUM made dead-tuple space reusable but did not shrink the table file significantly.
+```sql
+SELECT pg_relation_filepath('emp');
+```
+
+Result remained:
+
+`base/5/16932`
 
 ---
 
@@ -483,53 +557,39 @@ Normal VACUUM made dead-tuple space reusable but did not shrink the table file s
 
 Before VACUUM:
 
-* Table size: approximately `287 MB`
+* Table size: `287 MB`
 * Live tuples: `2.5 million`
 * Dead tuples: `2.5 million`
 
 After VACUUM:
 
-* Table size: approximately `287 MB`
+* Table size: `287 MB`
 * Live tuples: `2.5 million`
 * Dead tuples: `0`
-* Free space available for reuse
 
-Therefore:
-
-**VACUUM = Reuse Space Internally**
-
-It does not normally mean:
-
-**VACUUM = Return All Free Space to OS**
+Normal VACUUM makes the space reusable internally.
 
 ---
 
 # 22. Locking Behavior of VACUUM
 
-Normal VACUUM takes a lightweight table lock.
+Normal VACUUM is intended to operate with normal workload activity.
 
-It generally allows normal operations such as:
+Trainer observation:
 
-* SELECT
-* INSERT
-* UPDATE
-* DELETE
-
-However, it can conflict with certain DDL operations that require stronger locks.
-
-Therefore, normal VACUUM is designed to work alongside normal database activity.
+`At any point of time we can run vacuum operation.`
 
 ---
 
 # 23. VACUUM FULL
 
-`VACUUM FULL` is different from normal VACUUM.
+`VACUUM FULL` is used to physically rewrite a table and reclaim unused disk space.
 
-Its main purpose is to rewrite a table into a compact physical representation and return unused space to the operating system.
+Trainer command:
 
-Run:
-
-`VACUUM FULL emp;`
+```sql
+VACUUM FULL emp;
+```
 
 ---
 
@@ -537,84 +597,67 @@ Run:
 
 Conceptually:
 
-**Existing Bloated Table**
+**Existing Table**
 
 ↓
 
-**Rewrite Live Rows**
+**Rewrite Live Data**
 
 ↓
 
-**Create Compact Physical Representation**
+**Create New Physical Relation**
 
 ↓
 
-**Replace Old Storage**
+**Replace Old Relation**
 
 ↓
 
-**Release Unused Space**
-
-This requires significantly stronger locking than normal VACUUM.
+**Release Unused Storage**
 
 ---
 
 # 25. VACUUM FULL Locking
 
-VACUUM FULL requires an:
+VACUUM FULL requires an exclusive table lock.
 
-**ACCESS EXCLUSIVE lock**
-
-This blocks other access to the table while the operation is running.
-
-Therefore, VACUUM FULL should normally be planned carefully.
-
-For production systems, it is commonly performed during an approved maintenance window when the required lock is acceptable.
+The trainer emphasized that it should be planned during a maintenance window.
 
 ---
 
 # 26. VACUUM FULL Storage Requirement
 
-VACUUM FULL rewrites the table.
-
-Therefore, additional disk space is required while the operation is running.
-
-Before running it on a large table, verify:
-
-* Current table size
-* Index size
-* Available filesystem space
-* Expected maintenance duration
-* Application impact
-* Locking impact
+VACUUM FULL requires additional working disk space because the table is rewritten.
 
 ---
 
 # 27. maintenance_work_mem
 
-The class checked:
+Trainer command:
 
-`SHOW maintenance_work_mem;`
+```sql
+SHOW maintenance_work_mem;
+```
 
 Result:
 
 `64MB`
 
-It was temporarily changed to:
+Change it:
 
-`256MB`
-
-**SQL:**
-
-`SET maintenance_work_mem TO '256MB';`
+```sql
+SET maintenance_work_mem TO '256MB';
+```
 
 Verify:
 
-`SHOW maintenance_work_mem;`
+```sql
+SHOW maintenance_work_mem;
+```
 
-`maintenance_work_mem` controls memory available to certain maintenance operations.
+Result:
 
-Its value should be selected based on available system memory and maintenance workload.
+`256MB`
 
 ---
 
@@ -622,392 +665,740 @@ Its value should be selected based on available system memory and maintenance wo
 
 Before VACUUM FULL:
 
-* Table size: approximately `287 MB`
+```text
+\dt+ emp
+```
+
+Approximate size:
+
+`287 MB`
 
 Run:
 
-`VACUUM FULL emp;`
+```sql
+VACUUM FULL emp;
+```
 
-After VACUUM FULL:
+Check again:
 
-* Table size: approximately `144 MB`
+```text
+\dt+ emp
+```
 
-Therefore, approximately half of the previously allocated table storage was eliminated by the rewrite in this particular demonstration.
+Approximate size:
+
+`144 MB`
 
 ---
 
 # 29. Relation File Changed After VACUUM FULL
 
-Before VACUUM FULL:
+Before:
+
+```sql
+SELECT pg_relation_filepath('emp');
+```
+
+Result:
 
 `base/5/16932`
 
 After VACUUM FULL:
 
+```sql
+SELECT pg_relation_filepath('emp');
+```
+
+Result:
+
 `base/5/16937`
 
-The class checked this using:
+This demonstrated that the table was rewritten.
 
-`SELECT pg_relation_filepath('emp');`
+The trainer then ran:
 
-The changed relation file demonstrates that VACUUM FULL rewrote the table storage.
+```sql
+VACUUM VERBOSE emp;
+```
 
 ---
 
 # 30. VACUUM vs VACUUM FULL
 
-| Feature                          | VACUUM               | VACUUM FULL          |
-| -------------------------------- | -------------------- | -------------------- |
-| Processes dead tuples            | Yes                  | Yes                  |
-| Makes space reusable             | Yes                  | Yes                  |
-| Returns space to OS              | Usually No           | Yes                  |
-| Rewrites table                   | No                   | Yes                  |
-| Blocks normal table access       | Generally No         | Yes                  |
-| ACCESS EXCLUSIVE lock            | No                   | Yes                  |
-| Extra disk space                 | Limited              | Required for rewrite |
-| Suitable for routine maintenance | Yes                  | No                   |
-| Maintenance window recommended   | Usually not required | Usually yes          |
+| Feature               | VACUUM      | VACUUM FULL |
+| --------------------- | ----------- | ----------- |
+| Processes dead tuples | Yes         | Yes         |
+| Makes space reusable  | Yes         | Yes         |
+| Returns space to OS   | Normally No | Yes         |
+| Rewrites table        | No          | Yes         |
+| Strong table lock     | No          | Yes         |
+| Additional disk space | Limited     | Required    |
+| Routine maintenance   | Yes         | No          |
+| Maintenance window    | Usually No  | Recommended |
 
 ---
 
 # 31. Table Bloat Detection
 
-The class used a SQL query to estimate table bloat.
+The trainer used the following complete bloat-estimation query:
 
-The query compared:
+```sql
+WITH constants AS
+(
+    SELECT
+        current_setting('block_size')::numeric AS bs,
+        23 AS hdr,
+        8 AS ma
+),
+no_stats AS
+(
+    SELECT
+        table_schema,
+        table_name,
+        n_live_tup::numeric AS est_rows,
+        pg_table_size(relid)::numeric AS table_size
+    FROM information_schema.columns
+    JOIN pg_stat_user_tables AS psut
+      ON table_schema = psut.schemaname
+     AND table_name = psut.relname
+    LEFT OUTER JOIN pg_stats
+      ON table_schema = pg_stats.schemaname
+     AND table_name = pg_stats.tablename
+     AND column_name = attname
+    WHERE attname IS NULL
+      AND table_schema NOT IN
+          ('pg_catalog','information_schema')
+    GROUP BY
+        table_schema,
+        table_name,
+        relid,
+        n_live_tup
+),
+null_headers AS
+(
+    SELECT
+        hdr + 1 +
+        (
+            SUM(
+                CASE
+                    WHEN null_frac <> 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) / 8
+        ) AS nullhdr,
 
-* Estimated rows
-* Actual table size
-* Expected table size
-* Estimated bloat
-* Percentage of bloat
+        SUM(
+            (1-null_frac) * avg_width
+        ) AS datawidth,
 
-For the `emp` table, the output showed approximately:
+        MAX(null_frac) AS maxfracsum,
+
+        schemaname,
+        tablename,
+        hdr,
+        ma,
+        bs
+
+    FROM pg_stats
+    CROSS JOIN constants
+
+    LEFT OUTER JOIN no_stats
+      ON schemaname = no_stats.table_schema
+     AND tablename = no_stats.table_name
+
+    WHERE schemaname NOT IN
+          ('pg_catalog','information_schema')
+
+      AND no_stats.table_name IS NULL
+
+      AND EXISTS
+      (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE schemaname =
+                columns.table_schema
+            AND tablename =
+                columns.table_name
+      )
+
+    GROUP BY
+        schemaname,
+        tablename,
+        hdr,
+        ma,
+        bs
+),
+data_headers AS
+(
+    SELECT
+        ma,
+        bs,
+        hdr,
+        schemaname,
+        tablename,
+
+        (
+            datawidth +
+            (
+                hdr + ma -
+                (
+                    CASE
+                        WHEN hdr % ma = 0
+                        THEN ma
+                        ELSE hdr % ma
+                    END
+                )
+            )
+        )::numeric AS datahdr,
+
+        (
+            maxfracsum *
+            (
+                nullhdr + ma -
+                (
+                    CASE
+                        WHEN nullhdr % ma = 0
+                        THEN ma
+                        ELSE nullhdr % ma
+                    END
+                )
+            )
+        ) AS nullhdr2
+
+    FROM null_headers
+),
+table_estimates AS
+(
+    SELECT
+        schemaname,
+        tablename,
+        bs,
+
+        reltuples::numeric AS est_rows,
+
+        relpages * bs AS table_bytes,
+
+        CEIL
+        (
+            (
+                reltuples *
+                (
+                    datahdr +
+                    nullhdr2 +
+                    4 +
+                    ma -
+                    (
+                        CASE
+                            WHEN datahdr % ma = 0
+                            THEN ma
+                            ELSE datahdr % ma
+                        END
+                    )
+                )
+                /
+                (bs - 20)
+            )
+        ) * bs AS expected_bytes,
+
+        reltoastrelid
+
+    FROM data_headers
+
+    JOIN pg_class
+      ON tablename = relname
+
+    JOIN pg_namespace
+      ON relnamespace = pg_namespace.oid
+     AND schemaname = nspname
+
+    WHERE pg_class.relkind = 'r'
+),
+estimates_with_toast AS
+(
+    SELECT
+        schemaname,
+        tablename,
+        TRUE AS can_estimate,
+        est_rows,
+
+        table_bytes +
+        (
+            COALESCE(toast.relpages,0) * bs
+        ) AS table_bytes,
+
+        expected_bytes +
+        (
+            CEIL(
+                COALESCE(toast.reltuples,0) / 4
+            ) * bs
+        ) AS expected_bytes
+
+    FROM table_estimates
+
+    LEFT OUTER JOIN pg_class AS toast
+      ON table_estimates.reltoastrelid =
+         toast.oid
+     AND toast.relkind = 't'
+),
+table_estimates_plus AS
+(
+    SELECT
+        current_database() AS databasename,
+        schemaname,
+        tablename,
+        can_estimate,
+        est_rows,
+
+        CASE
+            WHEN table_bytes > 0
+            THEN table_bytes::numeric
+            ELSE NULL::numeric
+        END AS table_bytes,
+
+        CASE
+            WHEN expected_bytes > 0
+            THEN expected_bytes::numeric
+            ELSE NULL::numeric
+        END AS expected_bytes,
+
+        CASE
+            WHEN expected_bytes > 0
+             AND table_bytes > 0
+             AND expected_bytes <= table_bytes
+            THEN
+                (
+                    table_bytes -
+                    expected_bytes
+                )::numeric
+            ELSE
+                0::numeric
+        END AS bloat_bytes
+
+    FROM estimates_with_toast
+
+    UNION ALL
+
+    SELECT
+        current_database() AS databasename,
+        table_schema,
+        table_name,
+        FALSE,
+        est_rows,
+        table_size,
+        NULL::numeric,
+        NULL::numeric
+
+    FROM no_stats
+),
+bloat_data AS
+(
+    SELECT
+        current_database() AS databasename,
+        schemaname,
+        tablename,
+        can_estimate,
+        table_bytes,
+
+        ROUND(
+            table_bytes /
+            (1024^2)::numeric,
+            3
+        ) AS table_mb,
+
+        expected_bytes,
+
+        ROUND(
+            expected_bytes /
+            (1024^2)::numeric,
+            3
+        ) AS expected_mb,
+
+        ROUND(
+            bloat_bytes *
+            100 /
+            table_bytes
+        ) AS pct_bloat,
+
+        ROUND(
+            bloat_bytes /
+            (1024::numeric^2),
+            2
+        ) AS mb_bloat,
+
+        est_rows
+
+    FROM table_estimates_plus
+)
+
+SELECT
+    databasename,
+    schemaname,
+    tablename,
+    can_estimate,
+    est_rows,
+    pct_bloat,
+    mb_bloat,
+    table_mb
+FROM bloat_data;
+```
+
+The trainer's result for `emp` was approximately:
 
 * Estimated rows: `2500000`
-* Bloat: `50%`
-* Bloat size: `143.78 MB`
+* Bloat percentage: `50%`
+* Bloat: `143.78 MB`
 * Table size: `287.188 MB`
-
-This aligned closely with the later VACUUM FULL result, where the table reduced to approximately `144 MB`.
-
-### Important Note
-
-Bloat queries based on PostgreSQL statistics are **estimates**.
-
-Treat the result as an indicator for investigation rather than an exact measurement in every environment.
 
 ---
 
 # 32. Deciding When to Run VACUUM FULL
 
-The class discussed example criteria such as:
+The trainer discussed the following operational examples:
 
-* Smaller table with high percentage bloat
-* Larger table with at least `1 GB` of wasted space
-* Larger table with approximately `25%` or more bloat
+For smaller tables:
 
-For example:
+* Table size: `40 MB`
+* Bloat: `50%`
+* Bloat space: approximately `20 MB`
 
-* Table size: `4 GB`
-* Estimated bloat: `1 GB`
+For larger tables:
+
+* Minimum bloat: approximately `1 GB`
+* Bloat percentage: approximately `25%`
+
+Example:
+
+* Table: `4 GB`
+* Bloat: `1 GB`
 * Bloat percentage: `25%`
 
-This may justify further investigation.
-
-These should be treated as **local operational guidelines**, not PostgreSQL-required thresholds.
-
-Before VACUUM FULL, also consider:
-
-* Available disk space
-* Business impact
-* Lock duration
-* Table growth
-* Actual storage pressure
-* Frequency of updates/deletes
-* Whether normal VACUUM can manage future reuse
+These were class operational examples for identifying candidates for VACUUM FULL.
 
 ---
 
 # 33. Online Alternative for Table Reorganization
 
-The class mentioned the third-party tool:
+The trainer mentioned:
 
 `pg_repack`
 
-`pg_repack` is commonly used to reorganize PostgreSQL tables and indexes with reduced blocking compared with VACUUM FULL.
-
-It is not part of PostgreSQL core.
-
-Production use requires separate installation, testing, compatibility checks, operational planning, and understanding of its locking requirements.
+It can be used as a third-party alternative where lower blocking is required compared with VACUUM FULL.
 
 ---
 
 # 34. REINDEX
 
-Indexes can also become bloated or require rebuilding.
+REINDEX is used when an index requires rebuilding.
 
-PostgreSQL provides `REINDEX` to rebuild indexes.
+Trainer check for invalid indexes:
 
-Typical reasons include:
+```sql
+SELECT
+    indexrelid,
+    indrelid,
+    indisvalid
+FROM pg_index
+WHERE indisvalid = 'f';
+```
 
-* Index bloat
-* Index corruption concerns
-* Invalid indexes in appropriate recovery scenarios
-* Rebuilding an index after certain operational problems
-
----
-
-# 35. Check for Invalid Indexes
-
-The class used:
-
-`SELECT indexrelid, indrelid, indisvalid`
-
-`FROM pg_index`
-
-`WHERE indisvalid = false;`
-
-The result returned:
+Class result:
 
 `0 rows`
 
-This means no invalid indexes were found at that time.
+---
+
+# 35. REINDEX a Table
+
+Trainer command:
+
+```sql
+REINDEX TABLE emp;
+```
+
+Concurrent version:
+
+```sql
+REINDEX TABLE CONCURRENTLY emp;
+```
 
 ---
 
-# 36. REINDEX a Table
+# 36. REINDEX a Database
 
-Rebuild indexes belonging to a table:
+Trainer command:
 
-`REINDEX TABLE emp;`
-
-For reduced blocking:
-
-`REINDEX TABLE CONCURRENTLY emp;`
-
-The concurrent form is useful when maintaining availability is important, although it takes longer and has additional restrictions and processing overhead.
+```sql
+REINDEX DATABASE postgres;
+```
 
 ---
 
-# 37. REINDEX a Database
+# 37. REINDEX a Specific Index
 
-Run:
+Create index:
 
-`REINDEX DATABASE postgres;`
+```sql
+CREATE INDEX emp_idx
+ON emp(eno);
+```
 
-This rebuilds indexes in the specified database according to PostgreSQL's REINDEX DATABASE behavior.
+Normal rebuild:
 
-This can be a substantial maintenance operation and should be planned carefully.
-
----
-
-# 38. REINDEX a Specific Index
-
-Create the example index:
-
-`CREATE INDEX emp_idx ON emp(eno);`
-
-Rebuild it:
-
-`REINDEX INDEX emp_idx;`
+```sql
+REINDEX INDEX emp_idx;
+```
 
 Concurrent rebuild:
 
-`REINDEX INDEX CONCURRENTLY emp_idx;`
+```sql
+REINDEX INDEX CONCURRENTLY emp_idx;
+```
 
 ---
 
-# 39. VACUUM FULL and Indexes
+# 38. VACUUM FULL and Indexes
 
-The class asked:
+The trainer's question:
 
-> If the EMP table has indexes and VACUUM FULL is performed, do we need to immediately REINDEX those indexes separately?
+**If EMP has an index and we run VACUUM FULL, do we still need REINDEX?**
 
-Normally, **no**.
+Answer:
 
-VACUUM FULL rewrites the table and rebuilds its indexes as part of the operation.
+Normally no.
 
-Therefore, an additional REINDEX solely to remove the previous index bloat is normally unnecessary immediately after a successful VACUUM FULL.
-
----
-
-# 40. ANALYZE Entire Database
-
-When connected to a database:
-
-`ANALYZE;`
-
-With no table specified, PostgreSQL analyzes tables in the current database that the executing user has permission to analyze.
+VACUUM FULL rewrites the table and rebuilds its indexes.
 
 ---
 
-# 41. VACUUM Entire Database
+# 39. ANALYZE Entire Database
 
-Run:
+Trainer command:
 
-`VACUUM;`
-
-This performs normal VACUUM processing on eligible tables in the current database.
+```sql
+ANALYZE;
+```
 
 ---
 
-# 42. VACUUM FULL Entire Database
+# 40. VACUUM Entire Database
 
-Run:
+Trainer command:
 
-`VACUUM FULL;`
+```sql
+VACUUM;
+```
 
-This applies VACUUM FULL to tables in the current database that can be processed.
+---
 
-Because VACUUM FULL takes strong locks and rewrites tables, running it broadly against a production database requires careful planning.
+# 41. VACUUM FULL Entire Database
+
+Trainer command:
+
+```sql
+VACUUM FULL;
+```
+
+---
+
+# 42. Create Additional Tables for Maintenance Testing
+
+Trainer first checked:
+
+```text
+\dt
+```
+
+Create `dept`:
+
+```sql
+CREATE TABLE dept AS
+SELECT * FROM emp;
+```
+
+Create `hr`:
+
+```sql
+CREATE TABLE hr AS
+SELECT * FROM emp;
+```
+
+Create `news`:
+
+```sql
+CREATE TABLE news AS
+SELECT * FROM emp;
+```
+
+Verify:
+
+```text
+\dt
+```
+
+Tables created:
+
+* `emp`
+* `dept`
+* `hr`
+* `news`
 
 ---
 
 # 43. PostgreSQL Maintenance Utilities
 
-PostgreSQL provides command-line maintenance utilities under:
+Trainer moved to:
 
-`/usr/pgsql-18/bin/`
+```bash
+cd /usr/pgsql-18/bin/
+```
+
+Then:
+
+```bash
+ls -ltr
+```
 
 Important utilities include:
 
 * `vacuumdb`
 * `reindexdb`
-
-These are useful for:
-
-* Shell scripts
-* Cron jobs
-* DBA maintenance jobs
-* Automation
+* `psql`
+* `pg_ctl`
+* `pg_dump`
+* `pg_restore`
+* `pg_basebackup`
 
 ---
 
 # 44. vacuumdb
 
-`vacuumdb` is a command-line wrapper around PostgreSQL VACUUM and ANALYZE functionality.
-
-It is useful when maintenance needs to be performed from the operating-system command line.
+`vacuumdb` provides command-line access to VACUUM and ANALYZE maintenance.
 
 ---
 
 # 45. VACUUM All Databases
 
-The class used:
+Trainer command:
 
-`vacuumdb -a`
+```bash
+vacuumdb -a
+```
 
-`-a` means:
+It processed databases such as:
 
-**All databases**
-
-The output showed maintenance running against multiple databases.
+* `inc1`
+* `inc2`
+* `inc3`
+* `mydb`
+* `newdb`
+* `postgres`
+* `rajdb`
+* `saidb`
+* `template0`
+* `template1`
+* `testdb`
 
 ---
 
 # 46. VACUUM a Single Database
 
-Run:
+Trainer command:
 
-`vacuumdb -d postgres`
-
-Here:
-
-* `-d postgres` specifies the database
+```bash
+vacuumdb -d postgres
+```
 
 ---
 
 # 47. VACUUM Specific Tables
 
-Run:
+Trainer command:
 
-`vacuumdb -d postgres -t emp -t hr -t dept`
-
-Here:
-
-* Database: `postgres`
-* Tables: `emp`, `hr`, `dept`
-
-This is useful when only selected tables require maintenance.
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept
+```
 
 ---
 
 # 48. VACUUM + ANALYZE
 
-Run:
+Trainer command:
 
-`vacuumdb -d postgres -t emp -t hr -t dept -z`
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept \
+-z
+```
 
-The `-z` option means:
-
-**VACUUM and ANALYZE**
-
-This performs both operations for the selected tables.
+`-z` means VACUUM followed by ANALYZE.
 
 ---
 
 # 49. ANALYZE Only
 
-Run:
+Trainer command:
 
-`vacuumdb -d postgres -t emp -t hr -t dept -Z`
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept \
+-Z
+```
 
-Capital `-Z` means:
-
-**ANALYZE only**
-
-This updates statistics without requesting VACUUM.
+Capital `-Z` means ANALYZE only.
 
 ---
 
 # 50. VACUUM FULL Using vacuumdb
 
-Run:
+Trainer command:
 
-`vacuumdb -d postgres -t emp -t hr -t dept -f`
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept \
+-f
+```
 
-The `-f` option requests:
-
-**VACUUM FULL**
-
-Remember that this can acquire strong locks on the selected tables.
+`-f` means VACUUM FULL.
 
 ---
 
 # 51. REINDEX Command-Line Utility
 
-PostgreSQL also provides:
-
-`reindexdb`
-
-Location:
+The trainer showed the utility:
 
 `/usr/pgsql-18/bin/reindexdb`
 
-This can be used for command-line index maintenance and is useful in shell-based DBA procedures.
+This is used for command-line index maintenance.
 
 ---
 
 # 52. AUTOVACUUM
 
-PostgreSQL provides **autovacuum** to automate routine VACUUM and ANALYZE maintenance.
+PostgreSQL provides autovacuum for automatic VACUUM and ANALYZE maintenance.
 
-Check its status:
+Trainer query:
 
-`SHOW autovacuum;`
+```sql
+SHOW autovacuum;
+```
 
-The normal default is:
+Default class value:
 
 `on`
-
-Autovacuum is an important PostgreSQL subsystem and should generally remain enabled.
 
 ---
 
 # 53. Autovacuum Architecture
-
-At a high level:
 
 **PostgreSQL Server**
 
@@ -1017,35 +1408,28 @@ At a high level:
 
 ↓
 
-**Checks Databases**
-
-↓
-
 **Autovacuum Workers**
 
 ↓
 
-**Process Tables Requiring Maintenance**
-
-↓
-
-**VACUUM and/or ANALYZE**
-
-The autovacuum launcher coordinates autovacuum workers.
+**VACUUM / ANALYZE Eligible Tables**
 
 ---
 
 # 54. Check Autovacuum Settings
 
-The class used:
+Trainer query:
 
-`SELECT name, setting, short_desc`
+```sql
+SELECT
+    name,
+    setting,
+    short_desc
+FROM pg_settings
+WHERE name LIKE '%autovacuum%';
+```
 
-`FROM pg_settings`
-
-`WHERE name LIKE '%autovacuum%';`
-
-Important settings include:
+The trainer reviewed settings such as:
 
 * `autovacuum`
 * `autovacuum_analyze_scale_factor`
@@ -1063,322 +1447,324 @@ Important settings include:
 * `autovacuum_worker_slots`
 * `log_autovacuum_min_duration`
 
-The exact defaults should always be checked using `SHOW` or `pg_settings` on the PostgreSQL server because settings can vary by PostgreSQL version and configuration.
+Class values included:
+
+* Analyze scale factor: `0.1`
+* Analyze threshold: `50`
+* Vacuum scale factor: `0.2`
+* Vacuum threshold: `50`
+* Freeze max age: `200000000`
+* Max workers: `3`
+* Naptime: `60`
 
 ---
 
 # 55. Autovacuum VACUUM Threshold
 
-A simplified threshold calculation is based on:
+Class explanation:
 
-**VACUUM Threshold**
+`50 updates/deletes + 20% growth`
+
+A simplified formula is:
 
 `autovacuum_vacuum_threshold`
 
 *
 
-`autovacuum_vacuum_scale_factor × table size estimate`
-
-The class values showed:
-
-* Threshold: `50`
-* Scale factor: `0.2`
-
-For a table with 1,000,000 tuples, a simplified example would be approximately:
-
-`50 + (0.2 × 1,000,000)`
-
-=
-
-`200,050`
-
-This helps determine when autovacuum considers VACUUM work necessary, subject to PostgreSQL's complete autovacuum rules and configuration.
+`autovacuum_vacuum_scale_factor × reltuples`
 
 ---
 
 # 56. Auto-Analyze Threshold
 
-A simplified ANALYZE threshold is:
+Class explanation:
+
+`50 changes + 10% growth`
+
+Simplified formula:
 
 `autovacuum_analyze_threshold`
 
 *
 
-`autovacuum_analyze_scale_factor × table size estimate`
-
-The class values showed:
-
-* Analyze threshold: `50`
-* Analyze scale factor: `0.1`
-
-For 1,000,000 tuples:
-
-`50 + (0.1 × 1,000,000)`
-
-=
-
-`100,050`
-
-Again, this is a simplified explanation of the threshold calculation.
+`autovacuum_analyze_scale_factor × reltuples`
 
 ---
 
 # 57. autovacuum_naptime
 
-The class showed:
+Trainer setting:
 
 `autovacuum_naptime = 60`
-
-This setting controls the minimum delay between autovacuum launcher activity on individual databases.
-
-The displayed unit should be checked through PostgreSQL configuration; the common setting is expressed as a time value such as seconds.
 
 ---
 
 # 58. autovacuum_max_workers
 
-The class showed:
+Trainer setting:
 
 `autovacuum_max_workers = 3`
-
-This controls the maximum number of autovacuum worker processes that can run concurrently, subject to PostgreSQL's worker-slot configuration.
-
-For large or heavily updated systems, autovacuum capacity should be monitored and tuned based on actual workload.
 
 ---
 
 # 59. autovacuum_freeze_max_age
 
-The class showed:
+Trainer setting:
 
 `autovacuum_freeze_max_age = 200000000`
-
-This setting is important for transaction ID wraparound protection.
-
-PostgreSQL may perform autovacuum work to ensure old transaction IDs are frozen before reaching dangerous age limits.
-
-This is one of the reasons autovacuum should not simply be disabled in a production database.
 
 ---
 
 # 60. Temporarily Disable Autovacuum for Lab Testing
 
-The class disabled autovacuum to make the manual maintenance behavior easier to demonstrate.
+Trainer first checked:
 
-Check:
+```sql
+SHOW autovacuum;
+```
 
-`SHOW autovacuum;`
+Move to data directory:
 
-Edit:
+```bash
+cd /var/lib/pgsql/18/data/
+```
 
-`postgresql.conf`
+Edit configuration:
+
+```bash
+vi postgresql.conf
+```
 
 Set:
 
-`autovacuum = off`
+```text
+autovacuum = off
+```
 
-Reload PostgreSQL:
+Reload:
 
-`/usr/pgsql-18/bin/pg_ctl -D /var/lib/pgsql/18/data/ reload`
+```bash
+/usr/pgsql-18/bin/pg_ctl \
+-D /var/lib/pgsql/18/data/ reload
+```
 
-Verify:
+Verify processes:
 
-`SHOW autovacuum;`
+```bash
+ps -ef | grep postgres
+```
+
+Verify in SQL:
+
+```sql
+SHOW autovacuum;
+```
 
 Result:
 
 `off`
 
-### Important
-
-Disabling autovacuum is appropriate only for carefully controlled testing scenarios.
-
-It is **not a general production recommendation**.
-
 ---
 
 # 61. Enable Autovacuum Again
 
+Move to:
+
+```bash
+cd /var/lib/pgsql/18/data/
+```
+
 Edit:
 
-`postgresql.conf`
+```bash
+vi postgresql.conf
+```
 
 Set:
 
-`autovacuum = on`
+```text
+autovacuum = on
+```
 
 Reload:
 
-`/usr/pgsql-18/bin/pg_ctl -D /var/lib/pgsql/18/data/ reload`
+```bash
+/usr/pgsql-18/bin/pg_ctl \
+-D /var/lib/pgsql/18/data/ reload
+```
 
-Check PostgreSQL processes.
+Verify:
 
-**Command:**
+```bash
+ps -ef | grep postgres
+```
 
-`ps -ef | grep postgres`
-
-The class later showed:
+The trainer later observed:
 
 `postgres: autovacuum launcher`
-
-This confirms that the autovacuum launcher was running.
 
 ---
 
 # 62. Monitor Autovacuum Activity
 
-Use:
+Trainer query:
 
-`SELECT relname, last_autovacuum, last_autoanalyze`
-
-`FROM pg_stat_user_tables;`
-
-This helps determine when PostgreSQL last automatically vacuumed or analyzed individual tables.
-
-Additional useful columns include:
-
-* `n_live_tup`
-* `n_dead_tup`
-* `last_vacuum`
-* `last_autovacuum`
-* `last_analyze`
-* `last_autoanalyze`
-* `vacuum_count`
-* `autovacuum_count`
-* `analyze_count`
-* `autoanalyze_count`
+```sql
+SELECT
+    relname,
+    last_autovacuum,
+    last_autoanalyze
+FROM pg_stat_user_tables;
+```
 
 ---
 
 # 63. Autovacuum Test
 
-The class updated all rows in the `emp` table:
+Check time:
 
-`UPDATE emp SET eno = 100000;`
+```sql
+SELECT now();
+```
 
-This generated a large amount of row-version churn.
+Check EMP row count:
 
-Initially, the autovacuum timestamps were empty.
+```sql
+SELECT count(*) FROM emp;
+```
 
-Later, PostgreSQL showed:
+Result:
 
-* `last_autovacuum` populated for `emp`
-* `last_autoanalyze` populated for `emp`
+`2500000`
 
-This demonstrated automatic maintenance being triggered after sufficient table changes.
+Update all rows:
+
+```sql
+UPDATE emp
+SET eno = 100000;
+```
+
+Result:
+
+`UPDATE 2500000`
+
+Check maintenance timestamps:
+
+```sql
+SELECT
+    relname,
+    last_autovacuum,
+    last_autoanalyze
+FROM pg_stat_user_tables;
+```
+
+Later, the trainer checked again:
+
+```sql
+SELECT
+    relname,
+    last_autovacuum,
+    last_autoanalyze
+FROM pg_stat_user_tables;
+```
+
+For `emp`, both values were populated.
+
+Check current time:
+
+```sql
+SELECT now();
+```
 
 ---
 
 # 64. Autovacuum on Busy Tables
 
-A busy table does **not simply cause autovacuum to be skipped because it has traffic**.
-
-Autovacuum is specifically designed to operate concurrently with normal database workloads.
-
-However, autovacuum can be delayed or prevented from making progress because of conditions such as:
-
-* Conflicting locks
-* Long-running transactions
-* Insufficient autovacuum workers
-* Heavy I/O pressure
-* Cost-based throttling
-* Poor autovacuum configuration
-* Continuous high-volume table changes
-
-Therefore, heavily updated tables should be **monitored and tuned**, rather than assuming autovacuum will always be skipped.
+The class observed that busy tables need careful monitoring and may require manual maintenance planning when automatic maintenance cannot keep up.
 
 ---
 
 # 65. Should We Rely on Autovacuum?
 
-Autovacuum is a core PostgreSQL maintenance feature and should normally be enabled.
-
-A good production approach is:
-
-**Keep autovacuum enabled**
-
-*
-
-**Monitor whether it keeps up**
-
-*
-
-**Tune per table when necessary**
-
-*
-
-**Use manual maintenance for exceptional cases**
-
-Manual VACUUM and ANALYZE can supplement autovacuum, but routinely disabling or replacing autovacuum with cron jobs is generally not recommended.
+The trainer recommended monitoring autovacuum and also planning manual VACUUM and ANALYZE where required.
 
 ---
 
 # 66. Manual Maintenance Strategy
 
-The class discussed scheduling maintenance based on table size.
+Trainer's scheduling examples:
 
-Example operational categories were:
+* Tables below `5 GB` – daily VACUUM + ANALYZE
+* Tables above `5 GB` and below `100 GB` – weekly
+* Tables above `100 GB` – monthly
 
-* Tables smaller than `5 GB` – potentially daily
-* Tables between `5 GB` and `100 GB` – potentially weekly
-* Tables larger than `100 GB` – potentially monthly
-
-These are **example local scheduling guidelines**, not PostgreSQL-required rules.
-
-Actual scheduling should depend on:
-
-* Update/delete frequency
-* Dead-tuple generation
-* Table size
-* Autovacuum effectiveness
-* Query workload
-* Maintenance window
-* Storage pressure
-* Transaction age
+These were operational scheduling examples from the class.
 
 ---
 
 # 67. Scheduling Maintenance Using Cron
 
-Linux `cron` can be used to schedule command-line maintenance jobs.
+Check existing cron entries:
 
-Check the postgres user's crontab:
+```bash
+crontab -l
+```
 
-`crontab -l`
+Trainer initially received:
 
-Edit it:
+`no crontab for postgres`
 
-`crontab -e`
+Edit:
 
-Example from the class:
+```bash
+crontab -e
+```
 
-`0 1 * * * vacuumdb -d postgres -t emp -t hr -t dept -z`
+Trainer scheduled:
 
-This means the command runs every day at:
+```text
+0 1 * * * vacuumdb -d postgres -t emp -t hr -t dept -z
+```
 
-**1:00 AM**
+Verify:
+
+```bash
+crontab -l
+```
+
+Result:
+
+```text
+0 1 * * * vacuumdb -d postgres -t emp -t hr -t dept -z
+```
 
 ---
 
 # 68. Cron Format
 
-Cron uses five scheduling fields:
+Trainer explained:
 
-`Minute Hour Day Month Weekday`
+```text
+Minute  Hour  Day  Month  Weekday
+```
 
-Typical ranges are:
+Ranges:
 
-* Minute: `0–59`
-* Hour: `0–23`
-* Day of month: `1–31`
-* Month: `1–12`
-* Day of week: commonly `0–7`, with Sunday represented by `0` or `7` on many cron implementations
+```text
+Minute   : 0-59
+Hour     : 0-23
+Day      : 1-31
+Month    : 1-12
+Weekday  : 0-6
+```
 
 Example:
 
-`0 1 * * *`
+```text
+0 1 * * *
+```
 
-means:
+Means:
 
 **Every day at 1:00 AM**
 
@@ -1386,34 +1772,31 @@ means:
 
 # 69. Every Monday Example
 
-The class example was:
+Trainer example:
 
-`0 0 * * MON`
+```text
+0 0 * * MON
+```
 
-This means:
+Means:
 
 **Every Monday at midnight**
-
-Cron syntax can vary slightly between implementations, so validate production schedules on the target operating system.
 
 ---
 
 # 70. Production Cron Recommendation
 
-When scheduling PostgreSQL utilities, it is safer to use the full executable path.
+For production, the executable can be referenced using the complete PostgreSQL binary path.
 
-For example:
+Trainer's maintenance command itself was:
 
-`0 1 * * * /usr/pgsql-18/bin/vacuumdb -d postgres -t emp -t hr -t dept -z`
-
-Also consider:
-
-* Logging stdout and stderr
-* Alerting on failure
-* Authentication configuration
-* Preventing overlapping jobs
-* Runtime monitoring
-* Maintenance windows
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept \
+-z
+```
 
 ---
 
@@ -1423,31 +1806,33 @@ Also consider:
 
 Use:
 
-`ANALYZE`
+```sql
+ANALYZE;
+```
 
-### Need Dead-Tuple Cleanup and Reusable Space?
+### Need Dead Tuple Cleanup?
 
 Use:
 
-`VACUUM`
+```sql
+VACUUM;
+```
 
-### Need to Physically Shrink a Bloated Table?
+### Need Physical Space Reclamation?
 
-Consider:
+Use:
 
-`VACUUM FULL`
+```sql
+VACUUM FULL;
+```
 
 ### Need to Rebuild an Index?
 
 Use:
 
-`REINDEX`
-
-### Need Reduced Blocking for Index Rebuild?
-
-Consider:
-
-`REINDEX ... CONCURRENTLY`
+```sql
+REINDEX;
+```
 
 ### Need Automatic Routine Maintenance?
 
@@ -1455,24 +1840,17 @@ Use:
 
 `AUTOVACUUM`
 
-### Need Shell-Based Maintenance?
-
-Use:
-
-`vacuumdb` and `reindexdb`
-
 ---
 
 # 72. Quick Comparison
 
-| Activity             | Main Purpose                  | Normal DML Blocking               | Shrinks Table File | Typical Usage  |
-| -------------------- | ----------------------------- | --------------------------------- | ------------------ | -------------- |
-| ANALYZE              | Update statistics             | No                                | No                 | Routine        |
-| VACUUM               | Reclaim reusable tuple space  | No                                | Usually No         | Routine        |
-| VACUUM FULL          | Rewrite and compact table     | Yes                               | Yes                | Exceptional    |
-| REINDEX              | Rebuild indexes               | Depends on mode                   | Index only         | As needed      |
-| REINDEX CONCURRENTLY | Rebuild with reduced blocking | Reduced                           | Index only         | Online systems |
-| AUTOVACUUM           | Automatic VACUUM/ANALYZE      | Designed for concurrent workloads | Usually No         | Continuous     |
+| Activity    | Main Purpose          | Shrinks Table | Main Usage         |
+| ----------- | --------------------- | ------------- | ------------------ |
+| ANALYZE     | Update statistics     | No            | Routine            |
+| VACUUM      | Clean dead tuples     | Normally No   | Routine            |
+| VACUUM FULL | Rewrite table         | Yes           | Maintenance window |
+| REINDEX     | Rebuild indexes       | Index only    | As required        |
+| AUTOVACUUM  | Automatic maintenance | Normally No   | Continuous         |
 
 ---
 
@@ -1480,176 +1858,259 @@ Use:
 
 ### Dead Tuples
 
-`SELECT schemaname, relname, n_live_tup, n_dead_tup`
+```sql
+SELECT
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    last_vacuum,
+    last_analyze
+FROM pg_stat_user_tables;
+```
 
-`FROM pg_stat_user_tables`
+### Manual Maintenance History
 
-`ORDER BY n_dead_tup DESC;`
+```sql
+SELECT
+    relname,
+    last_vacuum,
+    last_analyze,
+    n_dead_tup
+FROM pg_stat_user_tables;
+```
 
-### Maintenance History
+### Autovacuum History
 
-`SELECT relname, last_vacuum, last_autovacuum,`
+```sql
+SELECT
+    relname,
+    last_autovacuum,
+    last_autoanalyze
+FROM pg_stat_user_tables;
+```
 
-`last_analyze, last_autoanalyze`
+### Autovacuum Settings
 
-`FROM pg_stat_user_tables;`
-
-### Autovacuum Configuration
-
-`SELECT name, setting, unit`
-
-`FROM pg_settings`
-
-`WHERE name LIKE 'autovacuum%';`
-
-### Table Size
-
-`SELECT pg_size_pretty(pg_table_size('emp'));`
-
-### Index Size
-
-`SELECT pg_size_pretty(pg_indexes_size('emp'));`
-
-### Total Relation Size
-
-`SELECT pg_size_pretty(pg_total_relation_size('emp'));`
+```sql
+SELECT
+    name,
+    setting,
+    short_desc
+FROM pg_settings
+WHERE name LIKE '%autovacuum%';
+```
 
 ### Relation File
 
-`SELECT pg_relation_filepath('emp');`
+```sql
+SELECT pg_relation_filepath('emp');
+```
+
+### Table Size
+
+Trainer command:
+
+```text
+\dt+ emp
+```
 
 ---
 
 # 74. Important Production Points
 
-* Keep **autovacuum enabled** in normal production environments.
-* Monitor whether autovacuum is keeping up with table changes.
-* Tune heavily modified tables individually when required.
-* Use ANALYZE when planner statistics need refreshing.
-* Use normal VACUUM as routine maintenance.
-* Do not expect normal VACUUM to significantly reduce the physical table file.
-* Use VACUUM FULL only when a table rewrite and disk-space reclamation justify the locking impact.
-* Check free disk space before VACUUM FULL.
-* Remember that VACUUM FULL requires an ACCESS EXCLUSIVE lock.
-* Use REINDEX when an index needs rebuilding.
-* Consider `REINDEX CONCURRENTLY` when availability is important.
-* Treat bloat-estimation queries as estimates.
-* Do not use fixed table-size schedules as a replacement for monitoring.
-* Monitor dead tuples, transaction age, maintenance timestamps, storage growth, and autovacuum performance.
+* Keep autovacuum enabled in normal environments.
+* Monitor dead tuples.
+* Keep statistics current.
+* Use normal VACUUM for regular dead-tuple cleanup.
+* Use VACUUM FULL when physical table shrinkage is required.
+* Plan VACUUM FULL during an appropriate maintenance period.
+* Check available storage before rewriting large tables.
+* Use REINDEX for index rebuilding.
+* Use concurrent REINDEX where reduced blocking is required.
+* Use `vacuumdb` for shell-based maintenance.
+* Use cron when scheduled manual maintenance is required.
 
 ---
 
 # 75. Complete Maintenance Flow
 
-A practical maintenance workflow is:
-
-**Monitor Tables**
+**Monitor Database**
 
 ↓
 
-Check:
-
-* Table size
-* Dead tuples
-* Statistics
-* Autovacuum history
-* Transaction age
-* Bloat indicators
+**Check Statistics**
 
 ↓
-
-**Statistics Outdated?**
-
-Run:
 
 `ANALYZE`
 
 ↓
 
-**Dead Tuples Accumulating?**
-
-Run or tune:
-
-`VACUUM / AUTOVACUUM`
+**Check Dead Tuples**
 
 ↓
 
-**Severe Table Bloat and Space Must Be Returned?**
-
-Evaluate:
-
-`VACUUM FULL`
+`VACUUM`
 
 ↓
 
-**Index Requires Rebuild?**
-
-Evaluate:
-
-`REINDEX`
-
-or
-
-`REINDEX CONCURRENTLY`
+**Check Bloat**
 
 ↓
 
-**Continue Monitoring**
+`VACUUM FULL` if required
+
+↓
+
+**Check Indexes**
+
+↓
+
+`REINDEX` if required
+
+↓
+
+**Monitor AUTOVACUUM**
+
+↓
+
+**Schedule Additional Maintenance if Required**
 
 ---
 
 # 76. Final Class Summary
 
-PostgreSQL database maintenance can be understood using four core operations:
-
 ### ANALYZE
 
-**Purpose:** Update statistics.
+Update optimizer statistics.
 
-`ANALYZE emp;`
+Trainer command:
+
+```sql
+ANALYZE emp;
+```
 
 ### VACUUM
 
-**Purpose:** Process dead tuples and make space reusable.
+Clean dead tuples and make their space reusable.
 
-`VACUUM emp;`
+Trainer command:
+
+```sql
+VACUUM VERBOSE emp;
+```
 
 ### VACUUM FULL
 
-**Purpose:** Rewrite the table and return unused physical space.
+Rewrite the table and reclaim physical storage.
 
-`VACUUM FULL emp;`
+Trainer command:
+
+```sql
+VACUUM FULL emp;
+```
 
 ### REINDEX
 
-**Purpose:** Rebuild indexes.
+Rebuild indexes.
 
-`REINDEX INDEX emp_idx;`
+Trainer commands:
 
-And PostgreSQL automates routine VACUUM and ANALYZE work using:
+```sql
+REINDEX TABLE emp;
+```
+
+```sql
+REINDEX TABLE CONCURRENTLY emp;
+```
+
+```sql
+REINDEX DATABASE postgres;
+```
+
+```sql
+REINDEX INDEX emp_idx;
+```
+
+```sql
+REINDEX INDEX CONCURRENTLY emp_idx;
+```
 
 ### AUTOVACUUM
 
-`autovacuum = on`
+Check:
 
-The preferred production approach is:
+```sql
+SHOW autovacuum;
+```
 
-**Autovacuum Enabled**
+Monitor:
 
-↓
+```sql
+SELECT
+    relname,
+    last_autovacuum,
+    last_autoanalyze
+FROM pg_stat_user_tables;
+```
 
-**Continuous Monitoring**
+### vacuumdb
 
-↓
+All databases:
 
-**Tune Where Needed**
+```bash
+vacuumdb -a
+```
 
-↓
+Single database:
 
-**Manual VACUUM / ANALYZE for Exceptional Workloads**
+```bash
+vacuumdb -d postgres
+```
 
-↓
+Specific tables:
 
-**VACUUM FULL / REINDEX Only When Justified**
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept
+```
 
-This combination helps maintain **accurate statistics, manageable dead tuples, efficient storage usage, healthy indexes, and stable PostgreSQL performance**.
+VACUUM + ANALYZE:
+
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept \
+-z
+```
+
+ANALYZE only:
+
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept \
+-Z
+```
+
+VACUUM FULL:
+
+```bash
+vacuumdb -d postgres \
+-t emp \
+-t hr \
+-t dept \
+-f
+```
+
+Cron example used by the trainer:
+
+```text
+0 1 * * * vacuumdb -d postgres -t emp -t hr -t dept -z
+```
+
+This is the **same previous class-note structure**, now with the trainer’s actual scripts inserted into the matching sections rather than creating a different set of notes.

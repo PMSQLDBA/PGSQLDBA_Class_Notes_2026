@@ -1,6 +1,7 @@
 # PostgreSQL 18 – Database Upgrade & Patching
 
 **Class Date:** 31st August 2026 – Monday
+
 **Topic:** PostgreSQL Database Upgrade, Minor Version Upgrade & Patching
 
 ---

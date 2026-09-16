@@ -2194,3 +2194,750 @@ Official references used:
 
 [1]: https://www.postgresql.org/docs/18/config-setting.html "PostgreSQL: Documentation: 18: 19.1. Setting Parameters"
 [2]: https://www.postgresql.org/docs/18/storage-file-layout.html "PostgreSQL: Documentation: 18: 66.1. Database File Layout"
+
+====================================================================================================================================
+
+Absolutely. Here is a **short, easy-to-revise PostgreSQL 18 Class 10 note**, keeping the important DBA/interview points and removing repetition.
+
+# PostgreSQL 18 – Class 10 Quick Notes
+
+## 1. YUM / DNF / RPM / Repository
+
+### Repository
+
+A repository is a source from where Linux gets software packages.
+
+```bash
+/etc/yum.repos.d/
+```
+
+Check repositories:
+
+```bash
+ls -ltr /etc/yum.repos.d/
+```
+
+### RPM
+
+RPM = **RPM Package Manager**
+
+It manages `.rpm` software packages.
+
+```bash
+rpm -qa | grep postgresql
+```
+
+### DNF
+
+`dnf` installs, removes and updates packages.
+
+```bash
+dnf search postgresql18
+dnf install postgresql18-server -y
+dnf remove postgresql18-server -y
+```
+
+---
+
+# 2. PGDG Repository
+
+PGDG = **PostgreSQL Global Development Group**
+
+It provides PostgreSQL packages for Red Hat-based Linux systems.
+
+For PostgreSQL 18:
+
+```text
+PostgreSQL : 18
+Architecture: x86_64
+```
+
+Repository files are normally under:
+
+```bash
+/etc/yum.repos.d/
+```
+
+---
+
+# 3. Install PostgreSQL 18
+
+Install server + contrib:
+
+```bash
+dnf install postgresql18-server postgresql18-contrib -y
+```
+
+Verify:
+
+```bash
+rpm -qa | grep postgresql
+```
+
+Important packages:
+
+| Package                | Purpose                  |
+| ---------------------- | ------------------------ |
+| `postgresql18`         | Client tools             |
+| `postgresql18-libs`    | Libraries                |
+| `postgresql18-server`  | Database server          |
+| `postgresql18-contrib` | Additional modules/tools |
+
+---
+
+# 4. PostgreSQL Binary Location
+
+PGDG PostgreSQL 18 binaries:
+
+```text
+/usr/pgsql-18/bin/
+```
+
+Important commands:
+
+```text
+postgres       → Database server
+psql           → SQL client
+pg_ctl         → Start/stop/reload/status
+initdb         → Create database cluster
+pg_dump        → Logical backup
+pg_restore     → Restore backup
+pg_basebackup  → Physical backup
+pg_upgrade     → Major-version upgrade
+pg_isready     → Check server availability
+```
+
+---
+
+# 5. Initialize PostgreSQL
+
+Installing PostgreSQL does **not** automatically create the database cluster.
+
+Initialize:
+
+```bash
+/usr/pgsql-18/bin/postgresql-18-setup initdb
+```
+
+Default PGDATA:
+
+```text
+/var/lib/pgsql/18/data/
+```
+
+Think of it simply:
+
+```text
+Install software
+      ↓
+initdb
+      ↓
+Create PostgreSQL cluster
+      ↓
+Start PostgreSQL
+```
+
+---
+
+# 6. PostgreSQL Database Cluster
+
+A PostgreSQL cluster is a collection of databases managed by one PostgreSQL server instance.
+
+It contains:
+
+```text
+Databases
+Roles
+Configuration
+WAL
+Transaction information
+System catalogs
+```
+
+The cluster is stored primarily inside **PGDATA**.
+
+---
+
+# 7. PGDATA
+
+For our PostgreSQL 18 installation:
+
+```text
+/var/lib/pgsql/18/data/
+```
+
+Check:
+
+```bash
+ls -ltr /var/lib/pgsql/18/data/
+```
+
+SQL:
+
+```sql
+SHOW data_directory;
+```
+
+---
+
+# 8. Important PGDATA Files/Directories
+
+| Item                   | Easy explanation             |
+| ---------------------- | ---------------------------- |
+| `PG_VERSION`           | PostgreSQL major version     |
+| `base`                 | Database files/directories   |
+| `global`               | Cluster-wide catalog data    |
+| `pg_wal`               | WAL files                    |
+| `pg_xact`              | Transaction commit status    |
+| `pg_replslot`          | Replication slot information |
+| `pg_tblspc`            | Tablespace symbolic links    |
+| `pg_subtrans`          | Subtransaction information   |
+| `pg_twophase`          | Prepared transaction state   |
+| `pg_notify`            | LISTEN/NOTIFY state          |
+| `pg_logical`           | Logical decoding information |
+| `pg_snapshots`         | Exported snapshots           |
+| `pg_stat`              | Statistics files             |
+| `pg_stat_tmp`          | Temporary statistics files   |
+| `pg_multixact`         | Multitransaction information |
+| `pg_commit_ts`         | Commit timestamp data        |
+| `pg_dynshmem`          | Dynamic shared-memory files  |
+| `pg_hba.conf`          | Client authentication        |
+| `pg_ident.conf`        | Username mappings            |
+| `postgresql.conf`      | Main configuration           |
+| `postgresql.auto.conf` | `ALTER SYSTEM` settings      |
+| `postmaster.pid`       | Running server information   |
+| `postmaster.opts`      | Server startup options       |
+
+---
+
+# 9. Most Important Directories
+
+### `base`
+
+Contains per-database directories.
+
+```text
+base/
+ ├── 1
+ ├── 4
+ ├── 5
+ └── ...
+```
+
+Numbers are database OIDs.
+
+Check:
+
+```sql
+SELECT oid, datname
+FROM pg_database;
+```
+
+### `global`
+
+Contains cluster-wide system catalog information.
+
+### `pg_wal`
+
+Contains **Write-Ahead Log**.
+
+Used for:
+
+```text
+Crash recovery
+Replication
+PITR
+Durability
+Logical decoding
+```
+
+Default WAL segment size:
+
+```text
+16 MB
+```
+
+But it can be different if configured during `initdb`.
+
+Check:
+
+```bash
+pg_controldata $PGDATA | grep "Bytes per WAL segment"
+```
+
+---
+
+# 10. PostgreSQL Configuration
+
+### `postgresql.conf`
+
+Main PostgreSQL configuration.
+
+Examples:
+
+```text
+port
+listen_addresses
+max_connections
+shared_buffers
+work_mem
+wal_level
+logging
+autovacuum
+```
+
+### `postgresql.auto.conf`
+
+Created/modified by:
+
+```sql
+ALTER SYSTEM
+```
+
+Example:
+
+```sql
+ALTER SYSTEM SET max_connections = 200;
+```
+
+**Important:**
+
+```text
+postgresql.auto.conf
+        ↓
+overrides
+        ↓
+postgresql.conf
+```
+
+This is an important interview point.
+
+---
+
+# 11. Check Configuration Source
+
+Very useful DBA query:
+
+```sql
+SELECT
+    name,
+    setting,
+    source,
+    sourcefile,
+    sourceline,
+    pending_restart
+FROM pg_settings
+WHERE name = 'max_connections';
+```
+
+Check configuration-file problems:
+
+```sql
+SELECT
+    sourcefile,
+    sourceline,
+    name,
+    setting,
+    applied,
+    error
+FROM pg_file_settings;
+```
+
+---
+
+# 12. `pg_hba.conf`
+
+`pg_hba.conf` = **Host-Based Authentication**
+
+Controls:
+
+```text
+Who can connect
+Which database
+Which user
+From which network
+Which authentication method
+```
+
+Example:
+
+```text
+host  all  all  192.168.1.0/24  scram-sha-256
+```
+
+After changing it:
+
+```bash
+systemctl reload postgresql-18
+```
+
+or:
+
+```sql
+SELECT pg_reload_conf();
+```
+
+Usually **no restart is required**.
+
+---
+
+# 13. `pg_ident.conf`
+
+Used for **username/identity mapping**.
+
+It is **not specifically an LDAP user mapping file**.
+
+---
+
+# 14. PostgreSQL Service
+
+Check:
+
+```bash
+systemctl status postgresql-18
+```
+
+Start:
+
+```bash
+systemctl start postgresql-18
+```
+
+Stop:
+
+```bash
+systemctl stop postgresql-18
+```
+
+Restart:
+
+```bash
+systemctl restart postgresql-18
+```
+
+Reload:
+
+```bash
+systemctl reload postgresql-18
+```
+
+Enable automatic startup:
+
+```bash
+systemctl enable postgresql-18
+```
+
+Best:
+
+```bash
+systemctl enable --now postgresql-18
+```
+
+Verify:
+
+```bash
+systemctl is-enabled postgresql-18
+```
+
+Expected:
+
+```text
+enabled
+```
+
+---
+
+# 15. Reload vs Restart
+
+### Reload
+
+Used when configuration can be changed without restarting PostgreSQL.
+
+```bash
+systemctl reload postgresql-18
+```
+
+### Restart
+
+Completely restarts PostgreSQL.
+
+```bash
+systemctl restart postgresql-18
+```
+
+Existing connections are interrupted.
+
+Check whether restart is required:
+
+```sql
+SELECT
+    name,
+    context,
+    pending_restart
+FROM pg_settings
+WHERE name = 'max_connections';
+```
+
+---
+
+# 16. `pg_ctl`
+
+`pg_ctl` is PostgreSQL's native server-control utility.
+
+**Important:** Don't run it as `root`.
+
+Switch to:
+
+```bash
+su - postgres
+```
+
+Then:
+
+```bash
+/usr/pgsql-18/bin/pg_ctl \
+-D /var/lib/pgsql/18/data status
+```
+
+Expected:
+
+```text
+pg_ctl: server is running
+```
+
+If you're inside `psql`:
+
+```text
+postgres=#
+```
+
+don't run `pg_ctl` there.
+
+Exit first:
+
+```sql
+\q
+```
+
+Then run `pg_ctl` from the Linux shell.
+
+---
+
+# 17. Useful DBA Checks
+
+### PostgreSQL version
+
+```bash
+/usr/pgsql-18/bin/postgres --version
+```
+
+### Running processes
+
+```bash
+ps -ef | grep '[p]ostgres'
+```
+
+### Port
+
+```bash
+ss -lntp | grep 5432
+```
+
+### PGDATA size
+
+```bash
+du -sh /var/lib/pgsql/18/data
+```
+
+### WAL size
+
+```bash
+du -sh /var/lib/pgsql/18/data/pg_wal
+```
+
+### PostgreSQL readiness
+
+```bash
+/usr/pgsql-18/bin/pg_isready
+```
+
+---
+
+# 18. Important SQL Commands
+
+```sql
+SELECT version();
+```
+
+```sql
+SHOW data_directory;
+```
+
+```sql
+SHOW config_file;
+```
+
+```sql
+SHOW hba_file;
+```
+
+```sql
+SHOW ident_file;
+```
+
+```sql
+SHOW port;
+```
+
+```sql
+SHOW listen_addresses;
+```
+
+```sql
+SELECT current_database();
+```
+
+```sql
+SELECT current_user;
+```
+
+Server start time:
+
+```sql
+SELECT pg_postmaster_start_time();
+```
+
+Uptime:
+
+```sql
+SELECT now() - pg_postmaster_start_time();
+```
+
+Reload configuration:
+
+```sql
+SELECT pg_reload_conf();
+```
+
+---
+
+# 19. Replication Slots
+
+Check:
+
+```sql
+SELECT
+    slot_name,
+    slot_type,
+    active,
+    restart_lsn,
+    confirmed_flush_lsn
+FROM pg_replication_slots;
+```
+
+Important:
+
+> Replication slots help retain required WAL, but they **do not guarantee replication success**.
+
+An inactive slot can retain WAL and eventually consume disk space.
+
+---
+
+# 20. Safety Rules 🚨
+
+### Never manually modify:
+
+```text
+base/
+global/
+pg_wal/
+pg_xact/
+pg_multixact/
+```
+
+### Never manually delete WAL:
+
+```bash
+rm -rf $PGDATA/pg_wal/*
+```
+
+### Never blindly delete:
+
+```text
+postmaster.pid
+```
+
+First check:
+
+```bash
+ps -ef | grep '[p]ostgres'
+```
+
+### Before major configuration changes
+
+Back up:
+
+```text
+postgresql.conf
+postgresql.auto.conf
+pg_hba.conf
+pg_ident.conf
+```
+
+---
+
+# 21. Installation Flow — Memorize This
+
+```text
+PGDG Repository
+       ↓
+DNF Install
+       ↓
+PostgreSQL Packages
+       ↓
+initdb
+       ↓
+PGDATA
+       ↓
+Start Service
+       ↓
+Enable Startup
+       ↓
+Check Process
+       ↓
+Check Port
+       ↓
+Connect using psql
+       ↓
+Configure PostgreSQL
+       ↓
+Configure Authentication
+```
+
+### ⭐ 10 Things to Remember for DBA Interviews
+
+```text
+1. PGDG        → PostgreSQL repository
+2. DNF         → Package manager
+3. initdb      → Creates cluster
+4. PGDATA      → Cluster data directory
+5. postgres    → Database server
+6. psql        → SQL client
+7. pg_ctl      → Server control utility
+8. pg_wal      → Write-Ahead Log
+9. pg_hba.conf → Client authentication
+10. auto.conf  → ALTER SYSTEM settings
+```
+
+And the **big configuration priority point**:
+
+```text
+postgresql.conf
+       ↓
+postgresql.auto.conf
+       ↓
+auto.conf wins for matching settings
+```
+
+This is the compact version I'd use as your **Class 10 revision sheet**.
+
